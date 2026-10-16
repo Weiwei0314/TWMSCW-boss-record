@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>楓之谷攻王計時器</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --text:#1c1f26; --muted:#6b7280; --border:#e2e4e9;
+    --idle:#e5e7eb; --idle-text:#6b7280;
+    --wait-bg:#dbeafe; --wait-text:#1d4ed8; --wait-border:#93c5fd;
+    --window-bg:#fef3c7; --window-text:#92400e; --window-border:#f59e0b;
+    --ready-bg:#fee2e2; --ready-text:#991b1b; --ready-border:#ef4444;
+    --accent:#2563eb; --accent-text:#ffffff; --danger:#dc2626;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14161b; --panel:#1d2027; --text:#e7e9ee; --muted:#9aa1ad; --border:#2b2f3a;
+      --idle:#2a2e38; --idle-text:#9aa1ad;
+      --wait-bg:#132a4d; --wait-text:#93c5fd; --wait-border:#1d4ed8;
+      --window-bg:#4a3306; --window-text:#fcd34d; --window-border:#f59e0b;
+      --ready-bg:#4c1414; --ready-text:#fca5a5; --ready-border:#ef4444;
+      --accent:#3b82f6; --accent-text:#0b0f19; --danger:#f87171;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;padding:16px;padding-bottom:40px;}
+  h1{font-size:1.25rem;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
+  .topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px;}
+  .clock{font-variant-numeric:tabular-nums;font-weight:600;font-size:1.05rem;}
+  select,input,button{font-family:inherit;font-size:.9rem;}
+  select,input[type=number],input[type=datetime-local],input[type=text]{
+    background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;
+  }
+  button{cursor:pointer;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:6px 12px;}
+  button:hover{filter:brightness(1.08);}
+  .btn-primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:600;}
+  .btn-danger{color:var(--danger);border-color:var(--danger);background:transparent;}
+  .spacer{flex:1;}
+  .summary{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-bottom:12px;}
+  .summary b{color:var(--text);}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;}
+  .card{border:1.5px solid var(--border);border-radius:12px;padding:10px;background:var(--panel);display:flex;flex-direction:column;gap:6px;min-height:150px;}
+  .card.idle{background:var(--idle);}
+  .card.waiting{background:var(--wait-bg);border-color:var(--wait-border);}
+  .card.window{background:var(--window-bg);border-color:var(--window-border);animation:pulse-amber 1.4s ease-in-out infinite;}
+  .card.ready{background:var(--ready-bg);border-color:var(--ready-border);animation:pulse-red 1.1s ease-in-out infinite;}
+  @keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.35);}50%{box-shadow:0 0 0 6px rgba(245,158,11,0);}}
+  @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45);}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);}}
+  .ch-head{display:flex;justify-content:space-between;align-items:center;}
+  .ch-num{font-weight:700;font-size:1rem;}
+  .status-tag{font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:6px;}
+  .idle .status-tag{color:var(--idle-text);background:transparent;}
+  .waiting .status-tag{color:var(--wait-text);background:transparent;}
+  .window .status-tag{color:var(--window-text);}
+  .ready .status-tag{color:var(--ready-text);}
+  .info-line{font-size:.72rem;color:var(--muted);}
+  .countdown{font-variant-numeric:tabular-nums;font-weight:700;font-size:1.05rem;}
+  .idle .countdown{color:var(--idle-text);font-size:.8rem;font-weight:400;}
+  .waiting .countdown{color:var(--wait-text);}
+  .window .countdown{color:var(--window-text);}
+  .ready .countdown{color:var(--ready-text);}
+  .card-actions{margin-top:auto;display:flex;gap:4px;}
+  .card-actions button{flex:1;padding:6px 4px;font-size:.72rem;}
+  .kill-btn{font-weight:700;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50;}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;width:100%;max-width:380px;}
+  .modal h2{margin-top:0;font-size:1.05rem;}
+  .field{margin-bottom:10px;display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:.8rem;color:var(--muted);}
+  .row2{display:flex;gap:8px;}
+  .row2 > *{flex:1;}
+  .radio-row{display:flex;gap:14px;font-size:.85rem;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
+  .empty-hint{color:var(--muted);font-size:.9rem;padding:30px 10px;text-align:center;}
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body>
+
+<h1>⚔️ 楓之谷攻王計時器</h1>
+<div class="sub">經典版 60 頻道 · 各頻道獨立計時 · 資料僅存在本機瀏覽器 (localStorage)</div>
+
+<div class="topbar">
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="spacer"></div>
+  <select id="bossSelect"></select>
+  <button id="editBossBtn">編輯王</button>
+  <button id="addBossBtn" class="btn-primary">+ 新增王</button>
+  <button id="clearAllBtn" class="btn-danger">清除全部紀錄</button>
+  <button id="deleteBossBtn" class="btn-danger">刪除此王</button>
+</div>
+
+<div class="summary" id="summary" hidden>
+  <span><span class="dot" style="background:var(--window-border)"></span>重生區間中：<b id="cntWindow">0</b></span>
+  <span><span class="dot" style="background:var(--ready-border)"></span>已超時/已重生：<b id="cntReady">0</b></span>
+  <span><span class="dot" style="background:var(--wait-border)"></span>等待中：<b id="cntWaiting">0</b></span>
+  <span>排序：
+    <select id="sortMode" style="font-size:.75rem;padding:2px 6px;">
+      <option value="channel">依頻道</option>
+      <option value="time">依重生時間（最緊急優先）</option>
+    </select>
+  </span>
+</div>
+
+<div id="gridArea"></div>
+
+<!-- Boss add/edit modal -->
+<div class="modal-overlay" id="bossModalOverlay" hidden>
+  <div class="modal">
+    <h2 id="bossModalTitle">新增王</h2>
+    <div class="field">
+      <label>王的名稱</label>
+      <input type="text" id="bossNameInput" placeholder="例如：潛水艇哥布林王">
+    </div>
+    <div class="field">
+      <label>重生時間類型</label>
+      <div class="radio-row">
+        <label><input type="radio" name="respawnType" value="fixed" checked> 固定時間</label>
+        <label><input type="radio" name="respawnType" value="range"> 區間隨機</label>
+      </div>
+    </div>
+    <div id="fixedFields">
+      <div class="field">
+        <label>固定重生時間</label>
+        <div class="row2">
+          <input type="number" id="fixedHour" min="0" placeholder="小時" value="2">
+          <input type="number" id="fixedMinute" min="0" max="59" placeholder="分鐘" value="0">
+        </div>
+      </div>
+    </div>
+    <div id="rangeFields" hidden>
+      <div class="field">
+        <label>最短重生時間</label>
+        <div class="row2">
+          <input type="number" id="minHour" min="0" placeholder="小時" value="2">
+          <input type="number" id="minMinute" min="0" max="59" placeholder="分鐘" value="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>最長重生時間</label>
+        <div class="row2">
+          <input type="number" id="maxHour" min="0" placeholder="小時" value="3">
+          <input type="number" id="maxMinute" min="0" max="59" placeholder="分鐘" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="bossModalCancel">取消</button>
+      <button id="bossModalSave" class="btn-primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manual time edit modal -->
+<div class="modal-overlay" id="timeModalOverlay" hidden>
+  <div class="modal">
+    <h2>手動設定擊殺時間 - <span id="timeModalChannel"></span></h2>
+    <div class="field">
+      <label>擊殺時間</label>
+      <input type="datetime-local" id="manualTimeInput">
+    </div>
+    <div class="modal-actions">
+      <button id="timeModalCancel">取消</button>
+      <button id="timeModalSave" class="btn-primary">套用</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'maple_boss_timer_v1';
+const CHANNEL_COUNT = 60;
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { bosses: [], activeBossId: null, sortMode: 'channel' };
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+let state = loadState();
+
+function genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function getActiveBoss(){
+  return state.bosses.find(b => b.id === state.activeBossId) || null;
+}
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function formatClock(d){ return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+function formatDuration(ms){
+  if(ms < 0) ms = 0;
+  const totalSec = Math.floor(ms/1000);
+  const h = Math.floor(totalSec/3600);
+  const m = Math.floor((totalSec%3600)/60);
+  const s = totalSec%60;
+  return pad(h)+':'+pad(m)+':'+pad(s);
+}
+function toLocalDatetimeInputValue(ts){
+  const d = new Date(ts);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+
+function computeStatus(boss, killTs, nowMs){
+  if(killTs == null) return { state:'idle' };
+  if(boss.respawnType === 'fixed'){
+    const respawnAt = killTs + boss.fixedMinutes*60000;
+    if(nowMs < respawnAt) return { state:'waiting', targetTime: respawnAt, remainingMs: respawnAt - nowMs };
+    return { state:'ready', overdueMs: nowMs - respawnAt };
+  } else {
+    const minAt = killTs + boss.minMinutes*60000;
+    const maxAt = killTs + boss.maxMinutes*60000;
+    if(nowMs < minAt) return { state:'waiting', targetTime:minAt, remainingMs: minAt-nowMs, maxTime:maxAt };
+    if(nowMs <= maxAt) return { state:'window', targetTime:maxAt, remainingMs: maxAt-nowMs };
+    return { state:'ready', overdueMs: nowMs - maxAt };
+  }
+}
+
+// ---------- Boss selector ----------
+const bossSelect = document.getElementById('bossSelect');
+const editBossBtn = document.getElementById('editBossBtn');
+const deleteBossBtn = document.getElementById('deleteBossBtn');
+const clearAllBtn = document.getElementById('clearAllBtn');
+const addBossBtn = document.getElementById('addBossBtn');
+const summaryEl = document.getElementById('summary');
+const gridArea = document.getElementById('gridArea');
+const sortModeSelect = document.getElementById('sortMode');
+
+function renderBossSelector(){
+  bossSelect.innerHTML = '';
+  if(state.bosses.length === 0){
+    const opt = document.createElement('option');
+    opt.textContent = '尚無王，請先新增';
+    bossSelect.appendChild(opt);
+    editBossBtn.disabled = true;
+    deleteBossBtn.disabled = true;
+    clearAllBtn.disabled = true;
+    return;
+  }
+  editBossBtn.disabled = false;
+  deleteBossBtn.disabled = false;
+  clearAllBtn.disabled = false;
+  state.bosses.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.id;
+    opt.textContent = b.name;
+    if(b.id === state.activeBossId) opt.selected = true;
+    bossSelect.appendChild(opt);
+  });
+}
+
+bossSelect.addEventListener('change', () => {
+  state.activeBossId = bossSelect.value;
+  saveState();
+  renderGrid();
+});
+
+sortModeSelect.addEventListener('change', () => {
+  state.sortMode = sortModeSelect.value;
+  saveState();
+  renderGrid();
+});
+
+// ---------- Boss modal ----------
+const bossModalOverlay = document.getElementById('bossModalOverlay');
+const bossModalTitle = document.getElementById('bossModalTitle');
+const bossNameInput = document.getElementById('bossNameInput');
+const fixedFields = document.getElementById('fixedFields');
+const rangeFields = document.getElementById('rangeFields');
+const fixedHour = document.getElementById('fixedHour');
+const fixedMinute = document.getElementById('fixedMinute');
+const minHour = document.getElementById('minHour');
+const minMinute = document.getElementById('minMinute');
+const maxHour = document.getElementById('maxHour');
+const maxMinute = document.getElementById('maxMinute');
+
+let editingBossId = null;
+
+function openBossModal(boss){
+  editingBossId = boss ? boss.id : null;
+  bossModalTitle.textContent = boss ? '編輯王' : '新增王';
+  bossNameInput.value = boss ? boss.name : '';
+  const type = boss ? boss.respawnType : 'fixed';
+  document.querySelectorAll('input[name=respawnType]').forEach(r => r.checked = (r.value === type));
+  toggleTypeFields(type);
+  if(boss && boss.respawnType === 'fixed'){
+    fixedHour.value = Math.floor(boss.fixedMinutes/60);
+    fixedMinute.value = boss.fixedMinutes%60;
+  } else {
+    fixedHour.value = 2; fixedMinute.value = 0;
+  }
+  if(boss && boss.respawnType === 'range'){
+    minHour.value = Math.floor(boss.minMinutes/60);
+    minMinute.value = boss.minMinutes%60;
+    maxHour.value = Math.floor(boss.maxMinutes/60);
+    maxMinute.value = boss.maxMinutes%60;
+  } else {
+    minHour.value = 2; minMinute.value = 0;
+    maxHour.value = 3; maxMinute.value = 0;
+  }
+  bossModalOverlay.hidden = false;
+}
+function closeBossModal(){ bossModalOverlay.hidden = true; }
+
+function toggleTypeFields(type){
+  fixedFields.hidden = type !== 'fixed';
+  rangeFields.hidden = type !== 'range';
+}
+document.querySelectorAll('input[name=respawnType]').forEach(r => {
+  r.addEventListener('change', e => toggleTypeFields(e.target.value));
+});
+
+addBossBtn.addEventListener('click', () => openBossModal(null));
+editBossBtn.addEventListener('click', () => {
+  const b = getActiveBoss();
+  if(b) openBossModal(b);
+});
+document.getElementById('bossModalCancel').addEventListener('click', closeBossModal);
+
+document.getElementById('bossModalSave').addEventListener('click', () => {
+  const name = bossNameInput.value.trim();
+  if(!name){ alert('請輸入王的名稱'); return; }
+  const type = document.querySelector('input[name=respawnType]:checked').value;
+
+  let fixedMinutes = null, minMinutes = null, maxMinutes = null;
+  if(type === 'fixed'){
+    fixedMinutes = (Number(fixedHour.value)||0)*60 + (Number(fixedMinute.value)||0);
+    if(fixedMinutes <= 0){ alert('請輸入有效的重生時間'); return; }
+  } else {
+    minMinutes = (Number(minHour.value)||0)*60 + (Number(minMinute.value)||0);
+    maxMinutes = (Number(maxHour.value)||0)*60 + (Number(maxMinute.value)||0);
+    if(minMinutes <= 0 || maxMinutes <= 0 || maxMinutes < minMinutes){
+      alert('請確認最短/最長重生時間設定正確（最長需大於等於最短）');
+      return;
+    }
+  }
+
+  if(editingBossId){
+    const b = state.bosses.find(x => x.id === editingBossId);
+    b.name = name; b.respawnType = type;
+    b.fixedMinutes = fixedMinutes; b.minMinutes = minMinutes; b.maxMinutes = maxMinutes;
+  } else {
+    const newBoss = {
+      id: genId(),
+      name, respawnType: type,
+      fixedMinutes, minMinutes, maxMinutes,
+      channels: {}
+    };
+    state.bosses.push(newBoss);
+    state.activeBossId = newBoss.id;
+  }
+  saveState();
+  closeBossModal();
+  renderBossSelector();
+  renderGrid();
+});
+
+clearAllBtn.addEventListener('click', () => {
+  const b = getActiveBoss();
+  if(!b) return;
+  const count = Object.keys(b.channels).length;
+  if(count === 0){ alert('目前沒有任何擊殺紀錄可清除。'); return; }
+  if(!confirm('確定要清除「'+b.name+'」全部 '+count+' 筆頻道擊殺紀錄嗎？此操作無法復原。')) return;
+  b.channels = {};
+  saveState();
+  renderGrid();
+});
+
+deleteBossBtn.addEventListener('click', () => {
+  const b = getActiveBoss();
+  if(!b) return;
+  if(!confirm('確定要刪除「'+b.name+'」嗎？此操作將刪除該王所有頻道的擊殺紀錄，且無法復原。')) return;
+  state.bosses = state.bosses.filter(x => x.id !== b.id);
+  state.activeBossId = state.bosses.length ? state.bosses[0].id : null;
+  saveState();
+  renderBossSelector();
+  renderGrid();
+});
+
+// ---------- Manual time modal ----------
+const timeModalOverlay = document.getElementById('timeModalOverlay');
+const timeModalChannel = document.getElementById('timeModalChannel');
+const manualTimeInput = document.getElementById('manualTimeInput');
+let editingChannel = null;
+
+function openTimeModal(channelNum){
+  editingChannel = channelNum;
+  timeModalChannel.textContent = '頻道 ' + channelNum;
+  const boss = getActiveBoss();
+  const existing = boss.channels[channelNum];
+  manualTimeInput.value = toLocalDatetimeInputValue(existing || Date.now());
+  timeModalOverlay.hidden = false;
+}
+document.getElementById('timeModalCancel').addEventListener('click', () => timeModalOverlay.hidden = true);
+document.getElementById('timeModalSave').addEventListener('click', () => {
+  const boss = getActiveBoss();
+  if(!boss || editingChannel == null) return;
+  const val = manualTimeInput.value;
+  if(!val) return;
+  const ts = new Date(val).getTime();
+  if(isNaN(ts)) return;
+  boss.channels[editingChannel] = ts;
+  saveState();
+  timeModalOverlay.hidden = true;
+  renderGrid();
+});
+
+// ---------- Grid ----------
+function killNow(channelNum){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  boss.channels[channelNum] = Date.now();
+  saveState();
+  renderGrid();
+}
+function clearChannel(channelNum){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  if(!confirm('確定要清除頻道 ' + channelNum + ' 的擊殺紀錄嗎？')) return;
+  delete boss.channels[channelNum];
+  saveState();
+  renderGrid();
+}
+
+const STATE_LABEL = { idle:'尚未記錄', waiting:'等待重生', window:'重生區間中', ready:'王已重生' };
+
+function buildCard(boss, channelNum, now){
+  const killTs = boss.channels[channelNum] || null;
+  const status = computeStatus(boss, killTs, now);
+
+  const card = document.createElement('div');
+  card.className = 'card ' + status.state;
+
+  const head = document.createElement('div');
+  head.className = 'ch-head';
+  head.innerHTML = '<span class="ch-num">頻道 ' + channelNum + '</span>'
+    + '<span class="status-tag">' + STATE_LABEL[status.state] + '</span>';
+  card.appendChild(head);
+
+  const info = document.createElement('div');
+  info.className = 'info-line';
+  const countdown = document.createElement('div');
+  countdown.className = 'countdown';
+
+  if(status.state === 'idle'){
+    info.textContent = '尚未記錄擊殺時間';
+    countdown.textContent = '--:--:--';
+  } else {
+    const killTimeStr = formatClock(new Date(killTs));
+    if(status.state === 'waiting'){
+      info.textContent = '擊殺時間 ' + killTimeStr + ' · 預計 ' + formatClock(new Date(status.targetTime)) + (boss.respawnType==='range' ? '~'+formatClock(new Date(status.maxTime)) : '');
+      countdown.textContent = formatDuration(status.remainingMs);
+    } else if(status.state === 'window'){
+      info.textContent = '擊殺時間 ' + killTimeStr + ' · 最晚 ' + formatClock(new Date(status.targetTime)) + ' 重生';
+      countdown.textContent = formatDuration(status.remainingMs) + ' 內必重生';
+    } else if(status.state === 'ready'){
+      info.textContent = '擊殺時間 ' + killTimeStr + ' · 已超時';
+      countdown.textContent = '+' + formatDuration(status.overdueMs);
+    }
+  }
+  card.appendChild(info);
+  card.appendChild(countdown);
+
+  const actions = document.createElement('div');
+  actions.className = 'card-actions';
+
+  const killBtn = document.createElement('button');
+  killBtn.className = 'kill-btn btn-primary';
+  killBtn.textContent = '擊殺!';
+  killBtn.addEventListener('click', () => killNow(channelNum));
+  actions.appendChild(killBtn);
+
+  const editBtn = document.createElement('button');
+  editBtn.textContent = '✎ 時間';
+  editBtn.addEventListener('click', () => openTimeModal(channelNum));
+  actions.appendChild(editBtn);
+
+  if(killTs != null){
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'btn-danger';
+    clearBtn.textContent = '清除';
+    clearBtn.addEventListener('click', () => clearChannel(channelNum));
+    actions.appendChild(clearBtn);
+  }
+  card.appendChild(actions);
+
+  return { card, status };
+}
+
+function renderGrid(){
+  const boss = getActiveBoss();
+  gridArea.innerHTML = '';
+  if(!boss){
+    summaryEl.hidden = true;
+    const hint = document.createElement('div');
+    hint.className = 'empty-hint';
+    hint.textContent = '尚未設定任何王，請點擊上方「+ 新增王」開始設定重生時間。';
+    gridArea.appendChild(hint);
+    return;
+  }
+  summaryEl.hidden = false;
+  sortModeSelect.value = state.sortMode || 'channel';
+
+  const now = Date.now();
+  const items = [];
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    items.push({ ch, killTs: boss.channels[ch] || null });
+  }
+
+  let cntWindow = 0, cntReady = 0, cntWaiting = 0;
+  const built = items.map(it => {
+    const status = computeStatus(boss, it.killTs, now);
+    if(status.state === 'window') cntWindow++;
+    else if(status.state === 'ready') cntReady++;
+    else if(status.state === 'waiting') cntWaiting++;
+    return { ch: it.ch, status };
+  });
+
+  document.getElementById('cntWindow').textContent = cntWindow;
+  document.getElementById('cntReady').textContent = cntReady;
+  document.getElementById('cntWaiting').textContent = cntWaiting;
+
+  const priority = { ready:0, window:1, waiting:2, idle:3 };
+  if(state.sortMode === 'time'){
+    built.sort((a,b) => {
+      if(priority[a.status.state] !== priority[b.status.state]) return priority[a.status.state]-priority[b.status.state];
+      if(a.status.state === 'ready') return (b.status.overdueMs||0) - (a.status.overdueMs||0);
+      if(a.status.state === 'window' || a.status.state === 'waiting') return (a.status.remainingMs||0) - (b.status.remainingMs||0);
+      return a.ch - b.ch;
+    });
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  built.forEach(it => {
+    const { card } = buildCard(boss, it.ch, now);
+    grid.appendChild(card);
+  });
+  gridArea.appendChild(grid);
+}
+
+// ---------- Clock & init ----------
+function tickClock(){
+  document.getElementById('clock').textContent = formatClock(new Date());
+}
+setInterval(() => { tickClock(); renderGrid(); }, 1000);
+tickClock();
+
+if(!state.activeBossId && state.bosses.length) state.activeBossId = state.bosses[0].id;
+renderBossSelector();
+renderGrid();
+</script>
+</body>
+</html>
