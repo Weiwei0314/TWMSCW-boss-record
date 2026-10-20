@@ -7,8 +7,10 @@
 <style>
   :root{
     --bg:#f4f5f7; --panel:#ffffff; --text:#1c1f26; --muted:#6b7280; --border:#e2e4e9;
-    --idle:#e5e7eb; --idle-text:#6b7280;
-    --wait-bg:#dbeafe; --wait-text:#1d4ed8; --wait-border:#93c5fd;
+    --idle:#eceef1; --idle-text:#6b7280;
+    /* 自己擊殺：綠色；別人擊殺：紫色 */
+    --me:#16a34a; --me-bg:#bbf7d0; --me-text:#14532d;
+    --other:#7c3aed; --other-bg:#e9d5ff; --other-text:#4c1d95;
     --window-bg:#fef3c7; --window-text:#92400e; --window-border:#f59e0b;
     --ready-bg:#fee2e2; --ready-text:#991b1b; --ready-border:#ef4444;
     --accent:#2563eb; --accent-text:#ffffff; --danger:#dc2626;
@@ -17,7 +19,8 @@
     :root{
       --bg:#14161b; --panel:#1d2027; --text:#e7e9ee; --muted:#9aa1ad; --border:#2b2f3a;
       --idle:#2a2e38; --idle-text:#9aa1ad;
-      --wait-bg:#132a4d; --wait-text:#93c5fd; --wait-border:#1d4ed8;
+      --me:#22c55e; --me-bg:#14532d; --me-text:#bbf7d0;
+      --other:#a78bfa; --other-bg:#3b1a6b; --other-text:#e9d5ff;
       --window-bg:#4a3306; --window-text:#fcd34d; --window-border:#f59e0b;
       --ready-bg:#4c1414; --ready-text:#fca5a5; --ready-border:#ef4444;
       --accent:#3b82f6; --accent-text:#0b0f19; --danger:#f87171;
@@ -26,8 +29,9 @@
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;padding:16px;padding-bottom:40px;}
   h1{font-size:1.25rem;margin:0 0 4px;}
+  h3{font-size:.9rem;margin:16px 0 8px;color:var(--muted);}
   .sub{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
-  .topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px;}
+  .topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;}
   .clock{font-variant-numeric:tabular-nums;font-weight:600;font-size:1.05rem;}
   select,input,button{font-family:inherit;font-size:.9rem;}
   select,input[type=number],input[type=datetime-local],input[type=text]{
@@ -35,36 +39,64 @@
   }
   button{cursor:pointer;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:6px 12px;}
   button:hover{filter:brightness(1.08);}
+  button:disabled{opacity:.5;cursor:default;}
   .btn-primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:600;}
   .btn-danger{color:var(--danger);border-color:var(--danger);background:transparent;}
+  .btn-me{background:var(--me);border-color:var(--me);color:#fff;font-weight:700;}
+  .btn-other{background:var(--other);border-color:var(--other);color:#fff;font-weight:700;}
   .spacer{flex:1;}
-  .summary{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-bottom:12px;}
+
+  /* 常駐（黏在畫面頂端）的「我的擊殺」列 */
+  .mybar{position:sticky;top:0;z-index:20;background:var(--panel);border:2px solid var(--me);border-radius:12px;padding:8px 12px;margin-bottom:12px;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+  .mybar-stats{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:.85rem;}
+  .mybar-stats b{font-size:1.05rem;font-variant-numeric:tabular-nums;}
+  .stat-me b{color:var(--me);}
+  .stat-other b{color:var(--other);}
+  .mybar-stats button{padding:2px 8px;font-size:.75rem;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+  .chips .none{color:var(--muted);font-size:.8rem;}
+  .chip{font-size:.78rem;font-weight:700;padding:3px 8px;border-radius:999px;cursor:pointer;font-variant-numeric:tabular-nums;color:#fff;background:var(--me);border:none;}
+  .chip.window{background:var(--window-border);color:#1c1f26;}
+  .chip.ready{background:var(--ready-border);}
+
+  .summary{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:.8rem;color:var(--muted);margin-bottom:8px;}
   .summary b{color:var(--text);}
-  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;}
-  .card{border:1.5px solid var(--border);border-radius:12px;padding:10px;background:var(--panel);display:flex;flex-direction:column;gap:6px;min-height:150px;}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;}
+
+  /* 固定每排 6 個頻道；畫面太窄時左右捲動 */
+  .grid-scroll{overflow-x:auto;padding-bottom:4px;}
+  .grid{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:14px 8px;}
+  .card{border:1.5px solid var(--border);border-left-width:6px;border-radius:10px;padding:8px;background:var(--panel);display:flex;flex-direction:column;gap:4px;scroll-margin-top:140px;}
   .card.idle{background:var(--idle);}
-  .card.waiting{background:var(--wait-bg);border-color:var(--wait-border);}
-  .card.window{background:var(--window-bg);border-color:var(--window-border);animation:pulse-amber 1.4s ease-in-out infinite;}
-  .card.ready{background:var(--ready-bg);border-color:var(--ready-border);animation:pulse-red 1.1s ease-in-out infinite;}
+  .card.me{border-left-color:var(--me);}
+  .card.other{border-left-color:var(--other);}
+  .card.waiting.me{background:var(--me-bg);border-color:var(--me);}
+  .card.waiting.other{background:var(--other-bg);border-color:var(--other);}
+  .card.window{background:var(--window-bg);border-top-color:var(--window-border);border-right-color:var(--window-border);border-bottom-color:var(--window-border);animation:pulse-amber 1.4s ease-in-out infinite;}
+  .card.ready{background:var(--ready-bg);border-top-color:var(--ready-border);border-right-color:var(--ready-border);border-bottom-color:var(--ready-border);animation:pulse-red 1.1s ease-in-out infinite;}
+  .card.flash{outline:3px solid var(--accent);outline-offset:2px;}
   @keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.35);}50%{box-shadow:0 0 0 6px rgba(245,158,11,0);}}
   @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45);}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);}}
-  .ch-head{display:flex;justify-content:space-between;align-items:center;}
-  .ch-num{font-weight:700;font-size:1rem;}
-  .status-tag{font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:6px;}
-  .idle .status-tag{color:var(--idle-text);background:transparent;}
-  .waiting .status-tag{color:var(--wait-text);background:transparent;}
-  .window .status-tag{color:var(--window-text);}
-  .ready .status-tag{color:var(--ready-text);}
-  .info-line{font-size:.72rem;color:var(--muted);}
-  .countdown{font-variant-numeric:tabular-nums;font-weight:700;font-size:1.05rem;}
+  .ch-head{display:flex;align-items:center;gap:6px;}
+  .ch-num{font-weight:700;font-size:.95rem;}
+  .owner-badge{font-size:.7rem;font-weight:700;color:#fff;padding:1px 6px;border-radius:6px;cursor:pointer;border:none;}
+  .owner-badge.me{background:var(--me);}
+  .owner-badge.other{background:var(--other);}
+  .pin-btn{margin-left:auto;padding:1px 5px;font-size:.75rem;opacity:.45;background:transparent;}
+  .pin-btn.on{opacity:1;border-color:var(--accent);}
+  .status-tag{font-size:.72rem;font-weight:700;}
+  .idle .status-tag{color:var(--idle-text);}
+  .waiting.me .status-tag,.waiting.me .countdown{color:var(--me-text);}
+  .waiting.other .status-tag,.waiting.other .countdown{color:var(--other-text);}
+  .window .status-tag,.window .countdown{color:var(--window-text);}
+  .ready .status-tag,.ready .countdown{color:var(--ready-text);}
+  .info-line{font-size:.7rem;color:var(--muted);min-height:1.1em;}
+  .waiting .info-line{color:inherit;opacity:.8;}
+  .countdown{font-variant-numeric:tabular-nums;font-weight:700;font-size:1rem;}
   .idle .countdown{color:var(--idle-text);font-size:.8rem;font-weight:400;}
-  .waiting .countdown{color:var(--wait-text);}
-  .window .countdown{color:var(--window-text);}
-  .ready .countdown{color:var(--ready-text);}
-  .card-actions{margin-top:auto;display:flex;gap:4px;}
-  .card-actions button{flex:1;padding:6px 4px;font-size:.72rem;}
-  .kill-btn{font-weight:700;}
+  .card-actions{display:flex;gap:4px;}
+  .card-actions button{flex:1;padding:5px 2px;font-size:.72rem;}
+
   .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50;}
   .modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;width:100%;max-width:380px;}
   .modal h2{margin-top:0;font-size:1.05rem;}
@@ -75,7 +107,51 @@
   .radio-row{display:flex;gap:14px;font-size:.85rem;}
   .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
   .empty-hint{color:var(--muted);font-size:.9rem;padding:30px 10px;text-align:center;}
+  .modal.wide{max-width:560px;}
+  .daily-scroll{max-height:60vh;overflow:auto;border:1px solid var(--border);border-radius:8px;}
+  .daily-table{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;}
+  .daily-table th,.daily-table td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .daily-table th:first-child,.daily-table td:first-child{text-align:left;}
+  .daily-table thead th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:600;}
+  .daily-table td.me{color:var(--me);font-weight:700;}
+  .daily-table td.other{color:var(--other);font-weight:700;}
+  .daily-table tr.today td{background:var(--idle);}
+  .daily-table td.cum{color:var(--muted);}
   [hidden]{display:none!important;}
+
+  /* 浮動小視窗 */
+  body.mini{padding:8px;scrollbar-width:none;}
+  body.mini::-webkit-scrollbar{display:none;}
+  body.mini .mini-title{font-weight:700;font-size:.95rem;margin-bottom:4px;}
+  body.mini .mybar{position:static;box-shadow:none;}
+  .mini-next{margin-top:8px;font-size:1rem;}
+  .mini-next b{font-size:1.6rem;color:var(--me);}
+  .mini-label{margin-top:6px;font-size:.78rem;color:var(--muted);}
+  .mini-ranges{margin-top:2px;font-size:.95rem;font-weight:700;line-height:1.4;font-variant-numeric:tabular-nums;word-break:break-word;}
+  .range-btn{font:inherit;font-weight:700;padding:0 5px;margin:1px 0;border:1px dashed var(--border);border-radius:6px;background:transparent;color:var(--text);}
+  .range-btn:hover{border-color:var(--danger);color:var(--danger);text-decoration:line-through;}
+  .mini-round{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.8rem;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+  .mini-round input{width:48px;padding:3px 6px;text-align:center;-moz-appearance:textfield;appearance:textfield;}
+  .mini-round input::-webkit-inner-spin-button,.mini-round input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+  .mini-round button{padding:3px 8px;font-size:.75rem;}
+  .mini-next{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .mini-next button{padding:3px 8px;font-size:.75rem;}
+  .soon-list{display:flex;flex-direction:column;gap:3px;margin-top:3px;}
+  .soon-row{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:6px;border:1.5px solid transparent;background:var(--idle);color:var(--text);font-size:.85rem;font-variant-numeric:tabular-nums;}
+  .soon-jump{flex:1;display:flex;justify-content:space-between;gap:8px;cursor:pointer;}
+  .soon-x{padding:0 6px;font-size:.72rem;line-height:1.4;background:transparent;color:inherit;border-color:currentColor;}
+  .early{font-size:.82rem;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .early.me b{color:var(--me);}
+  .early.other b{color:var(--other);}
+  .mini-ranges.prio .range-btn{border-color:var(--me);color:var(--me);}
+  body.mini .mini-next + .btn-primary{margin-top:6px;}
+  .soon-row.window{background:var(--window-bg);color:var(--window-text);}
+  /* 最接近重生的那一筆：黃紅交替閃爍 */
+  .soon-row.top{font-size:1.05rem;font-weight:700;padding:5px 8px;animation:soon-top 1s ease-in-out infinite;}
+  @keyframes soon-top{
+    0%,100%{background:var(--window-bg);color:var(--window-text);border-color:var(--window-border);}
+    50%{background:var(--ready-bg);color:var(--ready-text);border-color:var(--ready-border);}
+  }
 </style>
 </head>
 <body>
@@ -86,6 +162,7 @@
 <div class="topbar">
   <div class="clock" id="clock">--:--:--</div>
   <div class="spacer"></div>
+  <button id="miniBtn" title="開一個永遠在最上層的小視窗，切到遊戲也看得到">🪟 浮動小視窗</button>
   <select id="bossSelect"></select>
   <button id="editBossBtn">編輯王</button>
   <button id="addBossBtn" class="btn-primary">+ 新增王</button>
@@ -93,10 +170,15 @@
   <button id="deleteBossBtn" class="btn-danger">刪除此王</button>
 </div>
 
+<!-- 黏在頂端：我的擊殺 -->
+<div class="mybar" id="myBar" hidden></div>
+
 <div class="summary" id="summary" hidden>
+  <span><span class="dot" style="background:var(--me)"></span>自己擊殺</span>
+  <span><span class="dot" style="background:var(--other)"></span>別人擊殺</span>
   <span><span class="dot" style="background:var(--window-border)"></span>重生區間中：<b id="cntWindow">0</b></span>
-  <span><span class="dot" style="background:var(--ready-border)"></span>已超時/已重生：<b id="cntReady">0</b></span>
-  <span><span class="dot" style="background:var(--wait-border)"></span>等待中：<b id="cntWaiting">0</b></span>
+  <span><span class="dot" style="background:var(--ready-border)"></span>已重生：<b id="cntReady">0</b></span>
+  <span>等待中：<b id="cntWaiting">0</b></span>
   <span>排序：
     <select id="sortMode" style="font-size:.75rem;padding:2px 6px;">
       <option value="channel">依頻道</option>
@@ -162,6 +244,13 @@
       <label>擊殺時間</label>
       <input type="datetime-local" id="manualTimeInput">
     </div>
+    <div class="field">
+      <label>誰擊殺的</label>
+      <div class="radio-row">
+        <label><input type="radio" name="timeOwner" value="me" checked> 自己</label>
+        <label><input type="radio" name="timeOwner" value="other"> 別人</label>
+      </div>
+    </div>
     <div class="modal-actions">
       <button id="timeModalCancel">取消</button>
       <button id="timeModalSave" class="btn-primary">套用</button>
@@ -169,14 +258,59 @@
   </div>
 </div>
 
+<!-- 每日擊殺統計 -->
+<div class="modal-overlay" id="dailyModalOverlay" hidden>
+  <div class="modal wide">
+    <h2>📅 每日擊殺統計</h2>
+    <div class="field">
+      <label>統計範圍</label>
+      <select id="dailyScope">
+        <option value="boss">目前這隻王</option>
+        <option value="all">所有王合計</option>
+      </select>
+    </div>
+    <div id="dailyBody"></div>
+    <div class="modal-actions">
+      <button id="dailyModalClose" class="btn-primary">關閉</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORAGE_KEY = 'maple_boss_timer_v1';
 const CHANNEL_COUNT = 60;
+const COLS = 6;
+
+function genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+// 舊版資料：channels[ch] = 時間戳記 → 新版：{ ts, by, logId }，並建立擊殺紀錄 kills[]
+function migrate(s){
+  s.bosses = s.bosses || [];
+  s.bosses.forEach(b => {
+    b.channels = b.channels || {};
+    b.kills = b.kills || [];
+    b.pinned = b.pinned || [];
+    // 掃頻輪次：起始頻道 + 本輪已看過（沒王）的頻道
+    b.round = b.round || { start: CHANNEL_COUNT, checked: [] };
+    b.round.pass = b.round.pass || 1;
+    // 區間中被手動移除的擊殺紀錄 logId（重新擊殺會換新 logId，自動失效）
+    b.dismissed = b.dismissed || [];
+    Object.keys(b.channels).forEach(ch => {
+      const v = b.channels[ch];
+      if(typeof v === 'number'){
+        const id = genId() + ch;
+        b.channels[ch] = { ts: v, by: 'me', logId: id };
+        b.kills.push({ id, ch: Number(ch), ts: v, by: 'me' });
+      }
+    });
+  });
+  return s;
+}
 
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw) return migrate(JSON.parse(raw));
   }catch(e){}
   return { bosses: [], activeBossId: null, sortMode: 'channel' };
 }
@@ -184,13 +318,12 @@ function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); 
 
 let state = loadState();
 
-function genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-
 function getActiveBoss(){
   return state.bosses.find(b => b.id === state.activeBossId) || null;
 }
 
 function pad(n){ return String(n).padStart(2,'0'); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function formatClock(d){ return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
 function formatDuration(ms){
   if(ms < 0) ms = 0;
@@ -220,6 +353,52 @@ function computeStatus(boss, killTs, nowMs){
   }
 }
 
+// ---------- Kill records ----------
+function addKill(boss, ch, ts, by){
+  const id = genId();
+  boss.kills.push({ id, ch, ts, by });
+  boss.channels[ch] = { ts, by, logId: id };
+  // 重新擊殺過的頻道，等王重生後要再回到掃頻清單
+  if(boss.round) boss.round.checked = boss.round.checked.filter(c => c !== ch);
+}
+function findLog(boss, rec){ return rec ? boss.kills.find(k => k.id === rec.logId) : null; }
+
+function countKills(boss){
+  let me = 0, other = 0;
+  boss.kills.forEach(k => { if(k.by === 'me') me++; else other++; });
+  return { me, other, total: me + other };
+}
+
+// 以本機時間午夜 00:00 為一天的分界
+function dayKey(ts){
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+}
+function countToday(boss){
+  const today = dayKey(Date.now());
+  let me = 0, other = 0;
+  boss.kills.forEach(k => { if(dayKey(k.ts) !== today) return; if(k.by === 'me') me++; else other++; });
+  return { me, other, total: me + other };
+}
+
+// 依日期分組，回傳由新到舊的列，每列含當天數量與到當天為止的累積
+function dailyRows(kills){
+  const byDay = {};
+  kills.forEach(k => {
+    const key = dayKey(k.ts);
+    const d = byDay[key] || (byDay[key] = { day: key, me: 0, other: 0 });
+    if(k.by === 'me') d.me++; else d.other++;
+  });
+  const rows = Object.values(byDay).sort((a, b) => a.day < b.day ? -1 : 1);
+  let cumMe = 0, cumAll = 0;
+  rows.forEach(r => {
+    r.total = r.me + r.other;
+    cumMe += r.me; cumAll += r.total;
+    r.cumMe = cumMe; r.cumAll = cumAll;
+  });
+  return rows.reverse();
+}
+
 // ---------- Boss selector ----------
 const bossSelect = document.getElementById('bossSelect');
 const editBossBtn = document.getElementById('editBossBtn');
@@ -229,6 +408,7 @@ const addBossBtn = document.getElementById('addBossBtn');
 const summaryEl = document.getElementById('summary');
 const gridArea = document.getElementById('gridArea');
 const sortModeSelect = document.getElementById('sortMode');
+const myBar = document.getElementById('myBar');
 
 function renderBossSelector(){
   bossSelect.innerHTML = '';
@@ -256,13 +436,13 @@ function renderBossSelector(){
 bossSelect.addEventListener('change', () => {
   state.activeBossId = bossSelect.value;
   saveState();
-  renderGrid();
+  renderAll();
 });
 
 sortModeSelect.addEventListener('change', () => {
   state.sortMode = sortModeSelect.value;
   saveState();
-  renderGrid();
+  renderAll();
 });
 
 // ---------- Boss modal ----------
@@ -348,7 +528,8 @@ document.getElementById('bossModalSave').addEventListener('click', () => {
       id: genId(),
       name, respawnType: type,
       fixedMinutes, minMinutes, maxMinutes,
-      channels: {}
+      channels: {}, kills: [], pinned: [],
+      round: { start: CHANNEL_COUNT, checked: [], pass: 1 }, dismissed: []
     };
     state.bosses.push(newBoss);
     state.activeBossId = newBoss.id;
@@ -356,30 +537,39 @@ document.getElementById('bossModalSave').addEventListener('click', () => {
   saveState();
   closeBossModal();
   renderBossSelector();
-  renderGrid();
+  renderAll();
 });
 
 clearAllBtn.addEventListener('click', () => {
   const b = getActiveBoss();
   if(!b) return;
   const count = Object.keys(b.channels).length;
-  if(count === 0){ alert('目前沒有任何擊殺紀錄可清除。'); return; }
-  if(!confirm('確定要清除「'+b.name+'」全部 '+count+' 筆頻道擊殺紀錄嗎？此操作無法復原。')) return;
+  if(count === 0){ alert('目前沒有任何頻道計時可清除。'); return; }
+  if(!confirm('確定要清除「'+b.name+'」全部 '+count+' 個頻道的計時嗎？\n（累計擊殺數不會被扣除；要歸零請按「累計歸零」）')) return;
   b.channels = {};
   saveState();
-  renderGrid();
+  renderAll();
 });
 
 deleteBossBtn.addEventListener('click', () => {
   const b = getActiveBoss();
   if(!b) return;
-  if(!confirm('確定要刪除「'+b.name+'」嗎？此操作將刪除該王所有頻道的擊殺紀錄，且無法復原。')) return;
+  if(!confirm('確定要刪除「'+b.name+'」嗎？此操作將刪除該王所有頻道的擊殺紀錄與累計數，且無法復原。')) return;
   state.bosses = state.bosses.filter(x => x.id !== b.id);
   state.activeBossId = state.bosses.length ? state.bosses[0].id : null;
   saveState();
   renderBossSelector();
-  renderGrid();
+  renderAll();
 });
+
+function resetCounts(){
+  const b = getActiveBoss();
+  if(!b) return;
+  if(!confirm('確定要把「'+b.name+'」的累計擊殺數歸零嗎？（頻道計時會保留）')) return;
+  b.kills = [];
+  saveState();
+  renderAll();
+}
 
 // ---------- Manual time modal ----------
 const timeModalOverlay = document.getElementById('timeModalOverlay');
@@ -391,8 +581,10 @@ function openTimeModal(channelNum){
   editingChannel = channelNum;
   timeModalChannel.textContent = '頻道 ' + channelNum;
   const boss = getActiveBoss();
-  const existing = boss.channels[channelNum];
-  manualTimeInput.value = toLocalDatetimeInputValue(existing || Date.now());
+  const rec = boss.channels[channelNum];
+  manualTimeInput.value = toLocalDatetimeInputValue(rec ? rec.ts : Date.now());
+  const by = rec ? rec.by : 'me';
+  document.querySelectorAll('input[name=timeOwner]').forEach(r => r.checked = (r.value === by));
   timeModalOverlay.hidden = false;
 }
 document.getElementById('timeModalCancel').addEventListener('click', () => timeModalOverlay.hidden = true);
@@ -403,43 +595,103 @@ document.getElementById('timeModalSave').addEventListener('click', () => {
   if(!val) return;
   const ts = new Date(val).getTime();
   if(isNaN(ts)) return;
-  boss.channels[editingChannel] = ts;
+  const by = document.querySelector('input[name=timeOwner]:checked').value;
+  const rec = boss.channels[editingChannel];
+  if(rec){
+    // 修改既有紀錄，不算新的一次擊殺
+    rec.ts = ts; rec.by = by;
+    const log = findLog(boss, rec);
+    if(log){ log.ts = ts; log.by = by; }
+  } else {
+    addKill(boss, editingChannel, ts, by);
+  }
   saveState();
   timeModalOverlay.hidden = true;
-  renderGrid();
+  renderAll();
 });
 
-// ---------- Grid ----------
-function killNow(channelNum){
+// ---------- Channel actions ----------
+function kill(channelNum, by){
   const boss = getActiveBoss();
   if(!boss) return;
-  boss.channels[channelNum] = Date.now();
+  addKill(boss, channelNum, Date.now(), by);
   saveState();
-  renderGrid();
+  renderAll();
+}
+function toggleOwner(channelNum){
+  const boss = getActiveBoss();
+  const rec = boss && boss.channels[channelNum];
+  if(!rec) return;
+  rec.by = rec.by === 'me' ? 'other' : 'me';
+  const log = findLog(boss, rec);
+  if(log) log.by = rec.by;
+  saveState();
+  renderAll();
 }
 function clearChannel(channelNum){
   const boss = getActiveBoss();
   if(!boss) return;
-  if(!confirm('確定要清除頻道 ' + channelNum + ' 的擊殺紀錄嗎？')) return;
+  if(!confirm('確定要清除頻道 ' + channelNum + ' 的這筆擊殺嗎？\n（視為按錯，會從累計擊殺數扣掉這一筆）')) return;
+  const rec = boss.channels[channelNum];
+  if(rec) boss.kills = boss.kills.filter(k => k.id !== rec.logId);
   delete boss.channels[channelNum];
   saveState();
-  renderGrid();
+  renderAll();
+}
+function togglePin(channelNum){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  const i = boss.pinned.indexOf(channelNum);
+  if(i >= 0) boss.pinned.splice(i, 1); else boss.pinned.push(channelNum);
+  saveState();
+  renderAll();
+}
+function jumpToChannel(ch){
+  const el = document.getElementById('card-ch-' + ch);
+  if(!el) return;
+  window.focus();
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1500);
 }
 
+// ---------- Grid ----------
 const STATE_LABEL = { idle:'尚未記錄', waiting:'等待重生', window:'重生區間中', ready:'王已重生' };
 
-function buildCard(boss, channelNum, now){
-  const killTs = boss.channels[channelNum] || null;
-  const status = computeStatus(boss, killTs, now);
+function buildCard(boss, channelNum, status, withId){
+  const rec = boss.channels[channelNum] || null;
+  const pinned = boss.pinned.includes(channelNum);
 
   const card = document.createElement('div');
-  card.className = 'card ' + status.state;
+  card.className = 'card ' + status.state + (rec ? ' ' + rec.by : '');
+  if(withId) card.id = 'card-ch-' + channelNum;
 
   const head = document.createElement('div');
   head.className = 'ch-head';
-  head.innerHTML = '<span class="ch-num">頻道 ' + channelNum + '</span>'
-    + '<span class="status-tag">' + STATE_LABEL[status.state] + '</span>';
+  const num = document.createElement('span');
+  num.className = 'ch-num';
+  num.textContent = '頻道 ' + channelNum;
+  head.appendChild(num);
+  if(rec){
+    const badge = document.createElement('button');
+    badge.className = 'owner-badge ' + rec.by;
+    badge.textContent = rec.by === 'me' ? '我' : '別人';
+    badge.title = '點擊切換 自己 / 別人';
+    badge.addEventListener('click', () => toggleOwner(channelNum));
+    head.appendChild(badge);
+  }
+  const pinBtn = document.createElement('button');
+  pinBtn.className = 'pin-btn' + (pinned ? ' on' : '');
+  pinBtn.textContent = '📌';
+  pinBtn.title = pinned ? '取消置頂' : '置頂此頻道';
+  pinBtn.addEventListener('click', () => togglePin(channelNum));
+  head.appendChild(pinBtn);
   card.appendChild(head);
+
+  const tag = document.createElement('div');
+  tag.className = 'status-tag';
+  tag.textContent = STATE_LABEL[status.state];
+  card.appendChild(tag);
 
   const info = document.createElement('div');
   info.className = 'info-line';
@@ -447,82 +699,180 @@ function buildCard(boss, channelNum, now){
   countdown.className = 'countdown';
 
   if(status.state === 'idle'){
-    info.textContent = '尚未記錄擊殺時間';
     countdown.textContent = '--:--:--';
   } else {
-    const killTimeStr = formatClock(new Date(killTs));
+    const killTimeStr = formatClock(new Date(rec.ts));
     if(status.state === 'waiting'){
-      info.textContent = '擊殺時間 ' + killTimeStr + ' · 預計 ' + formatClock(new Date(status.targetTime)) + (boss.respawnType==='range' ? '~'+formatClock(new Date(status.maxTime)) : '');
+      info.textContent = '擊殺 ' + killTimeStr + ' · 預計 ' + formatClock(new Date(status.targetTime)) + (boss.respawnType==='range' ? '~'+formatClock(new Date(status.maxTime)) : '');
       countdown.textContent = formatDuration(status.remainingMs);
     } else if(status.state === 'window'){
-      info.textContent = '擊殺時間 ' + killTimeStr + ' · 最晚 ' + formatClock(new Date(status.targetTime)) + ' 重生';
-      countdown.textContent = formatDuration(status.remainingMs) + ' 內必重生';
+      info.textContent = '擊殺 ' + killTimeStr + ' · 最晚 ' + formatClock(new Date(status.targetTime));
+      countdown.textContent = formatDuration(status.remainingMs) + ' 內';
     } else if(status.state === 'ready'){
-      info.textContent = '擊殺時間 ' + killTimeStr + ' · 已超時';
+      info.textContent = '擊殺 ' + killTimeStr + ' · 已超時';
       countdown.textContent = '+' + formatDuration(status.overdueMs);
     }
   }
   card.appendChild(info);
   card.appendChild(countdown);
 
-  const actions = document.createElement('div');
-  actions.className = 'card-actions';
+  const row1 = document.createElement('div');
+  row1.className = 'card-actions';
+  const meBtn = document.createElement('button');
+  meBtn.className = 'btn-me';
+  meBtn.textContent = '我擊殺';
+  meBtn.addEventListener('click', () => kill(channelNum, 'me'));
+  const otherBtn = document.createElement('button');
+  otherBtn.className = 'btn-other';
+  otherBtn.textContent = '別人擊殺';
+  otherBtn.addEventListener('click', () => kill(channelNum, 'other'));
+  row1.append(meBtn, otherBtn);
+  card.appendChild(row1);
 
-  const killBtn = document.createElement('button');
-  killBtn.className = 'kill-btn btn-primary';
-  killBtn.textContent = '擊殺!';
-  killBtn.addEventListener('click', () => killNow(channelNum));
-  actions.appendChild(killBtn);
-
+  const row2 = document.createElement('div');
+  row2.className = 'card-actions';
   const editBtn = document.createElement('button');
   editBtn.textContent = '✎ 時間';
   editBtn.addEventListener('click', () => openTimeModal(channelNum));
-  actions.appendChild(editBtn);
-
-  if(killTs != null){
+  row2.appendChild(editBtn);
+  if(rec){
     const clearBtn = document.createElement('button');
     clearBtn.className = 'btn-danger';
     clearBtn.textContent = '清除';
     clearBtn.addEventListener('click', () => clearChannel(channelNum));
-    actions.appendChild(clearBtn);
+    row2.appendChild(clearBtn);
   }
-  card.appendChild(actions);
+  card.appendChild(row2);
 
-  return { card, status };
+  return card;
 }
 
-function renderGrid(){
+function makeGrid(boss, items, withId){
+  const wrap = document.createElement('div');
+  wrap.className = 'grid-scroll';
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  items.forEach(it => grid.appendChild(buildCard(boss, it.ch, it.status, withId)));
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+// 「我的擊殺」列：主畫面與浮動小視窗共用
+function myBarHTML(boss, statusByCh){
+  const c = countKills(boss);
+  let allMe = 0;
+  state.bosses.forEach(b => b.kills.forEach(k => { if(k.by === 'me') allMe++; }));
+
+  const chips = [];
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const rec = boss.channels[ch];
+    if(!rec || rec.by !== 'me') continue;
+    const s = statusByCh[ch];
+    let text;
+    if(s.state === 'waiting') text = formatDuration(s.remainingMs);
+    else if(s.state === 'window') text = '區間 ' + formatDuration(s.remainingMs);
+    else text = '已重生';
+    chips.push('<button class="chip ' + s.state + '" data-ch="' + ch + '">' + ch + '頻 · ' + text + '</button>');
+  }
+
+  const t = countToday(boss);
+  return '<div class="mybar-stats">'
+    + '<span>🗡️ <b>' + esc(boss.name) + '</b></span>'
+    + '<span class="stat-me">今天我擊殺 <b>' + t.me + '</b> 隻</span>'
+    + '<span class="stat-other">今天別人 <b>' + t.other + '</b> 隻</span>'
+    + '<span class="stat-me">累積我 <b>' + c.me + '</b></span>'
+    + '<span class="stat-other">累積別人 <b>' + c.other + '</b></span>'
+    + '<span>累積合計 <b>' + c.total + '</b></span>'
+    + (state.bosses.length > 1 ? '<span>所有王我共擊殺 <b>' + allMe + '</b> 隻</span>' : '')
+    + '<button data-act="daily">📅 每日統計</button>'
+    + '<button data-act="reset">累計歸零</button>'
+    + '</div>'
+    + '<div class="chips">' + (chips.length ? chips.join('') : '<span class="none">目前沒有自己擊殺中的頻道</span>') + '</div>';
+}
+
+function onBarClick(e){
+  const chip = e.target.closest('[data-ch]');
+  if(chip){ jumpToChannel(Number(chip.dataset.ch)); return; }
+  if(e.target.closest('[data-act=reset]')) resetCounts();
+  if(e.target.closest('[data-act=daily]')) openDailyModal();
+}
+myBar.addEventListener('click', onBarClick);
+
+// ---------- 每日統計 ----------
+const dailyModalOverlay = document.getElementById('dailyModalOverlay');
+const dailyScope = document.getElementById('dailyScope');
+const dailyBody = document.getElementById('dailyBody');
+
+function renderDaily(){
+  const boss = getActiveBoss();
+  const kills = dailyScope.value === 'all'
+    ? state.bosses.flatMap(b => b.kills)
+    : (boss ? boss.kills : []);
+  const rows = dailyRows(kills);
+  if(!rows.length){
+    dailyBody.innerHTML = '<div class="empty-hint">還沒有任何擊殺紀錄</div>';
+    return;
+  }
+  const today = dayKey(Date.now());
+  const w = ['日','一','二','三','四','五','六'];
+  dailyBody.innerHTML = '<div class="daily-scroll"><table class="daily-table">'
+    + '<thead><tr><th>日期</th><th>當天我</th><th>當天別人</th><th>當天合計</th><th>累積我</th><th>累積合計</th></tr></thead><tbody>'
+    + rows.map(r => {
+        const wd = w[new Date(r.day + 'T00:00').getDay()];
+        return '<tr' + (r.day === today ? ' class="today"' : '') + '>'
+          + '<td>' + r.day + '（' + wd + '）' + (r.day === today ? ' 今天' : '') + '</td>'
+          + '<td class="me">' + r.me + '</td>'
+          + '<td class="other">' + r.other + '</td>'
+          + '<td>' + r.total + '</td>'
+          + '<td class="cum">' + r.cumMe + '</td>'
+          + '<td class="cum">' + r.cumAll + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+function openDailyModal(){
+  window.focus();
+  renderDaily();
+  dailyModalOverlay.hidden = false;
+}
+dailyScope.addEventListener('change', renderDaily);
+document.getElementById('dailyModalClose').addEventListener('click', () => dailyModalOverlay.hidden = true);
+
+function renderAll(){
   const boss = getActiveBoss();
   gridArea.innerHTML = '';
   if(!boss){
     summaryEl.hidden = true;
+    myBar.hidden = true;
     const hint = document.createElement('div');
     hint.className = 'empty-hint';
     hint.textContent = '尚未設定任何王，請點擊上方「+ 新增王」開始設定重生時間。';
     gridArea.appendChild(hint);
+    renderMini(null, null);
     return;
   }
   summaryEl.hidden = false;
+  myBar.hidden = false;
   sortModeSelect.value = state.sortMode || 'channel';
 
   const now = Date.now();
-  const items = [];
-  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
-    items.push({ ch, killTs: boss.channels[ch] || null });
-  }
-
+  const statusByCh = {};
   let cntWindow = 0, cntReady = 0, cntWaiting = 0;
-  const built = items.map(it => {
-    const status = computeStatus(boss, it.killTs, now);
+  const built = [];
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const rec = boss.channels[ch];
+    const status = computeStatus(boss, rec ? rec.ts : null, now);
+    statusByCh[ch] = status;
     if(status.state === 'window') cntWindow++;
     else if(status.state === 'ready') cntReady++;
     else if(status.state === 'waiting') cntWaiting++;
-    return { ch: it.ch, status };
-  });
+    built.push({ ch, status });
+  }
 
   document.getElementById('cntWindow').textContent = cntWindow;
   document.getElementById('cntReady').textContent = cntReady;
   document.getElementById('cntWaiting').textContent = cntWaiting;
+
+  myBar.innerHTML = myBarHTML(boss, statusByCh);
 
   const priority = { ready:0, window:1, waiting:2, idle:3 };
   if(state.sortMode === 'time'){
@@ -534,25 +884,244 @@ function renderGrid(){
     });
   }
 
-  const grid = document.createElement('div');
-  grid.className = 'grid';
-  built.forEach(it => {
-    const { card } = buildCard(boss, it.ch, now);
-    grid.appendChild(card);
+  // 置頂頻道
+  const pinnedItems = boss.pinned.filter(ch => ch >= 1 && ch <= CHANNEL_COUNT).map(ch => ({ ch, status: statusByCh[ch] }));
+  if(pinnedItems.length){
+    const h = document.createElement('h3');
+    h.textContent = '📌 置頂頻道';
+    gridArea.appendChild(h);
+    gridArea.appendChild(makeGrid(boss, pinnedItems, false));
+    const h2 = document.createElement('h3');
+    h2.textContent = '全部頻道';
+    gridArea.appendChild(h2);
+  }
+  gridArea.appendChild(makeGrid(boss, built, true));
+
+  renderMini(boss, statusByCh);
+}
+
+// ---------- 浮動小視窗（永遠在最上層） ----------
+let miniWin = null;
+
+async function openMini(){
+  if(miniWin && !miniWin.closed){ miniWin.focus(); return; }
+  try{
+    if('documentPictureInPicture' in window){
+      miniWin = await documentPictureInPicture.requestWindow({ width: 360, height: 600 });
+    } else {
+      miniWin = window.open('', 'maple_mini', 'width=360,height=640');
+      if(!miniWin){ alert('瀏覽器封鎖了彈出視窗，請允許後再試。'); return; }
+      alert('此瀏覽器不支援「永遠在最上層」小視窗（需 Chrome 或 Edge 116 以上），已改開一般小視窗。');
+    }
+  }catch(e){
+    alert('無法開啟浮動小視窗：' + e.message);
+    return;
+  }
+  const d = miniWin.document;
+  d.title = '我的擊殺';
+  const st = d.createElement('style');
+  st.textContent = document.querySelector('style').textContent;
+  d.head.appendChild(st);
+  d.body.className = 'mini';
+  // 輪次控制列不跟著每秒重繪，輸入框才不會被打斷
+  d.body.innerHTML = '<div class="mybar" id="miniWrap">'
+    + '<div id="miniBar"></div>'
+    + '<div class="mini-round">從 <input type="number" id="miniStart" min="1" max="' + CHANNEL_COUNT + '"> 頻開始'
+    + '<button class="pass-btn" data-pass="1" title="重新開始：60 個頻道全掃（等待重生中的除外）">第一次・全掃</button>'
+    + '<button class="pass-btn" data-pass="2" title="只掃第一次沒被打掉的頻道">第二次・補掃</button></div>'
+    + '</div>';
+  // 每秒重繪會換掉按鈕，用 pointerdown 才不會漏掉點擊
+  d.getElementById('miniWrap').addEventListener('pointerdown', onMiniClick);
+  // 滑鼠滾輪不要改到起始頻道
+  d.getElementById('miniStart').addEventListener('wheel', e => e.preventDefault(), { passive: false });
+  d.getElementById('miniStart').addEventListener('change', e => {
+    const boss = getActiveBoss();
+    if(!boss) return;
+    boss.round.start = clampCh(e.target.value);
+    e.target.value = boss.round.start;
+    saveState();
+    renderAll();
   });
-  gridArea.appendChild(grid);
+  miniWin.addEventListener('pagehide', () => { miniWin = null; });
+  renderAll();
+}
+document.getElementById('miniBtn').addEventListener('click', openMini);
+
+function clampCh(v){
+  const n = Math.round(Number(v));
+  if(!n || n < 1) return 1;
+  return Math.min(n, CHANNEL_COUNT);
+}
+
+// 切換第一次 / 第二次：本輪手動清除的紀錄歸零。
+// 第二次的清單自然就是「沒被打掉的頻道」，因為打掉的都在等待重生中
+function setPass(boss, pass){
+  const input = miniWin && miniWin.document.getElementById('miniStart');
+  if(input) boss.round.start = clampCh(input.value);
+  boss.round.pass = pass;
+  boss.round.checked = [];
+  saveState();
+  renderAll();
+}
+
+function onMiniClick(e){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  const ok = e.target.closest('[data-check]');
+  if(ok){
+    ok.dataset.check.split(',').map(Number).forEach(ch => {
+      if(!boss.round.checked.includes(ch)) boss.round.checked.push(ch);
+    });
+    saveState();
+    renderAll();
+    return;
+  }
+  const pass = e.target.closest('[data-pass]');
+  if(pass){ setPass(boss, Number(pass.dataset.pass)); return; }
+  // 區間中但其實還沒重生：從「最接近重生」移除，讓後面的頻道顯示出來
+  const dis = e.target.closest('[data-dismiss]');
+  if(dis){
+    const rec = boss.channels[Number(dis.dataset.dismiss)];
+    if(rec){
+      const live = Object.values(boss.channels).map(r => r.logId);
+      boss.dismissed = boss.dismissed.filter(id => live.includes(id));
+      boss.dismissed.push(rec.logId);
+      saveState();
+      renderAll();
+    }
+    return;
+  }
+  onBarClick(e);
+}
+
+// 掃頻順序：從起始頻道往 1 頻倒數，再從 60 頻繞回起始頻道的上一頻
+function sweepOrder(start){
+  const order = [];
+  for(let ch = start; ch >= 1; ch--) order.push(ch);
+  for(let ch = CHANNEL_COUNT; ch > start; ch--) order.push(ch);
+  return order;
+}
+
+// 連續頻道合併成區段（例：60–56、54–6），每段是按鈕，點一下清除這段
+function rangesHTML(list){
+  const out = [];
+  for(let i = 0; i < list.length; ){
+    let j = i;
+    while(j + 1 < list.length && list[j + 1] === list[j] - 1) j++;
+    const label = i === j ? String(list[i]) : list[i] + '–' + list[j];
+    out.push('<button class="range-btn" data-check="' + list.slice(i, j + 1).join(',') + '" title="點一下清除這段">' + label + '</button>');
+    i = j + 1;
+  }
+  return out.join('、');
+}
+
+function miniHTML(boss, statusByCh){
+  const r = boss.round;
+  const start = r.start || CHANNEL_COUNT;
+  // 要掃的頻道：扣掉等待重生中（已被打掉）與本輪手動清除的
+  const todo = sweepOrder(start).filter(ch => statusByCh[ch].state !== 'waiting' && !r.checked.includes(ch));
+  // 我上次打過、現在已重生（區間中或已重生）的頻道優先掃
+  const isMine = ch => boss.channels[ch] && boss.channels[ch].by === 'me';
+  const prio = todo.filter(isMine);
+  const rest = todo.filter(ch => !isMine(ch));
+  const next = prio.length ? prio[0] : rest[0];
+
+  // 我 / 別人打掉的王，下次最早重生時間
+  const earliest = { me: null, other: null };
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const s = statusByCh[ch];
+    if(s.state !== 'waiting') continue;
+    const by = boss.channels[ch].by;
+    if(!earliest[by] || s.targetTime < earliest[by].t) earliest[by] = { t: s.targetTime, ms: s.remainingMs, ch };
+  }
+  const earlyLine = (by, label) => {
+    const e = earliest[by];
+    return '<div class="early ' + by + '">' + label + ' 最早重生：'
+      + (e ? '<b>' + formatClock(new Date(e.t)) + '</b>（' + formatDuration(e.ms) + ' 後 · ' + e.ch + ' 頻）' : '—')
+      + '</div>';
+  };
+
+  // 最接近重生：區間中的排最前，再依剩餘時間由短到長；手動移除的區間頻道不列出
+  const soon = [];
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const s = statusByCh[ch];
+    if(s.state === 'window' && boss.dismissed.includes(boss.channels[ch].logId)) continue;
+    if(s.state === 'waiting' || s.state === 'window') soon.push({ ch, s });
+  }
+  soon.sort((a, b) => {
+    if(a.s.state !== b.s.state) return a.s.state === 'window' ? -1 : 1;
+    return a.s.remainingMs - b.s.remainingMs;
+  });
+  const soonRows = soon.slice(0, 5).map((it, i) => {
+    const by = boss.channels[it.ch].by === 'me' ? '我' : '別人';
+    const isWin = it.s.state === 'window';
+    const text = isWin ? '區間中 · 最晚 ' + formatDuration(it.s.remainingMs) : formatDuration(it.s.remainingMs);
+    return '<div class="soon-row ' + it.s.state + (i === 0 ? ' top' : '') + '">'
+      + '<span class="soon-jump" data-ch="' + it.ch + '"><span>' + it.ch + ' 頻（' + by + '）</span><span>' + text + '</span></span>'
+      + (isWin ? '<button class="soon-x" data-dismiss="' + it.ch + '" title="還沒重生，先從這裡移除">✕</button>' : '')
+      + '</div>';
+  });
+
+  const passLabel = r.pass === 2 ? '第二次・補掃沒被打掉的' : '第一次・60 頻全掃';
+  let sweep;
+  if(todo.length){
+    sweep = '<div class="mini-next"><span>下一個：<b>' + next + ' 頻</b></span>'
+      + '<button data-check="' + next + '" title="這頻看過沒王，從清單移除">✓ 看過，下一個</button></div>'
+      + '<div class="mini-label">' + passLabel + ' · 剩 ' + todo.length + ' 頻</div>'
+      + (prio.length ? '<div class="mini-label">⭐ 先掃（我打過、已重生）</div><div class="mini-ranges prio">' + rangesHTML(prio) + '</div>' : '')
+      + (rest.length ? (prio.length ? '<div class="mini-label">其他頻道</div>' : '') + '<div class="mini-ranges">' + rangesHTML(rest) + '</div>' : '');
+  } else if(r.pass === 2){
+    sweep = '<div class="mini-next">兩次都掃完了 🎉</div>'
+      + '<button class="btn-primary" data-pass="1">開始新一輪（第一次・全掃）</button>';
+  } else {
+    sweep = '<div class="mini-next">第一次掃完了</div>'
+      + '<button class="btn-primary" data-pass="2">開始第二次（補掃沒被打掉的）</button>';
+  }
+
+  const c = countKills(boss);
+  const t = countToday(boss);
+  return '<div class="mybar-stats">'
+    + '<span>🗡️ <b>' + esc(boss.name) + '</b></span>'
+    + '<span class="stat-me">今天我 <b>' + t.me + '</b></span>'
+    + '<span class="stat-other">別人 <b>' + t.other + '</b></span>'
+    + '<span>累積我 <b>' + c.me + '</b> / 合計 ' + c.total + '</span>'
+    + '</div>'
+    + earlyLine('me', '🟢 我打的') + earlyLine('other', '🟣 別人打的')
+    + sweep
+    + '<div class="mini-label">⏰ 最接近重生</div>'
+    + (soonRows.length
+      ? '<div class="soon-list">' + soonRows.join('') + '</div>'
+      : '<div class="mini-label">目前沒有等待重生的頻道</div>');
+}
+
+function renderMini(boss, statusByCh){
+  if(!miniWin || miniWin.closed) return;
+  const d = miniWin.document;
+  const el = d.getElementById('miniBar');
+  if(!el) return;
+  el.innerHTML = boss ? miniHTML(boss, statusByCh) : '<span class="none">尚未設定任何王</span>';
+  d.querySelectorAll('.pass-btn').forEach(b => {
+    b.disabled = !boss;
+    b.classList.toggle('btn-primary', !!boss && Number(b.dataset.pass) === (boss.round.pass || 1));
+  });
+  const startInput = d.getElementById('miniStart');
+  if(startInput && d.activeElement !== startInput){
+    startInput.value = boss ? boss.round.start : '';
+    startInput.disabled = !boss;
+  }
 }
 
 // ---------- Clock & init ----------
 function tickClock(){
   document.getElementById('clock').textContent = formatClock(new Date());
 }
-setInterval(() => { tickClock(); renderGrid(); }, 1000);
+setInterval(() => { tickClock(); renderAll(); }, 1000);
 tickClock();
 
 if(!state.activeBossId && state.bosses.length) state.activeBossId = state.bosses[0].id;
+saveState();
 renderBossSelector();
-renderGrid();
+renderAll();
 </script>
 </body>
 </html>
