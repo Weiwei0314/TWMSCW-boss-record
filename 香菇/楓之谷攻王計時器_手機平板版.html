@@ -189,6 +189,11 @@
   .nav-btn.on{color:var(--accent);font-weight:700;}
   .wide-only{display:none;}
 
+  /* 頻道頁：跳到最上／最下（放在復原提示上方，不互相遮住） */
+  .jump-fab{position:fixed;z-index:44;right:calc(12px + env(safe-area-inset-right));bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 76px);display:none;flex-direction:column;gap:8px;}
+  body[data-tab=channels] .jump-fab{display:flex;}
+  .jump-fab button{width:46px;height:46px;min-height:46px;padding:0;border-radius:50%;font-size:1.2rem;font-weight:700;background:var(--panel);box-shadow:0 3px 10px rgba(0,0,0,.18);opacity:.92;}
+
   /* 復原提示 */
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);z-index:45;display:flex;align-items:center;gap:12px;background:var(--text);color:var(--bg);padding:6px 6px 6px 16px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.9rem;width:max-content;max-width:calc(100% - 24px);}
   .toast button{background:transparent;border-color:var(--bg);color:var(--bg);min-height:38px;font-weight:700;}
@@ -219,6 +224,7 @@
     .nav-btn[data-tab=channels]{display:none;}
     body[data-tab=channels] .nav-btn[data-tab=sweep]{color:var(--accent);font-weight:700;}
     .wide-only{display:inline;}
+    body[data-tab=sweep] .jump-fab{display:flex;}
     .grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr));}
   }
 </style>
@@ -332,6 +338,11 @@
   <button class="nav-btn" data-tab="stats"><span class="ic">📊</span><span>統計</span></button>
   <button class="nav-btn" data-tab="settings"><span class="ic">⚙️</span><span>設定</span></button>
 </nav>
+
+<div class="jump-fab" id="jumpFab">
+  <button data-edge="top" aria-label="跳到最上面">↑</button>
+  <button data-edge="bottom" aria-label="跳到最下面">↓</button>
+</div>
 
 <div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo">復原</button></div>
 
@@ -657,17 +668,31 @@ function jumpToChannel(ch){
 }
 
 // ---------- 分頁 ----------
+// 每個分頁各自記住捲到哪裡，切回來時停在原本的位置
+const tabScroll = {};
 function setTab(tab){
+  if(document.body.dataset.tab) tabScroll[document.body.dataset.tab] = window.scrollY;
   ui.tab = tab;
   document.body.dataset.tab = tab;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   saveUI();
   if(tab === 'stats') renderStatsView();
-  window.scrollTo(0, 0);
+  window.scrollTo(0, tabScroll[tab] || 0);
 }
+function scrollToEdge(where){
+  const top = where === 'top' ? 0 : document.documentElement.scrollHeight;
+  window.scrollTo({ top, behavior: 'smooth' });
+}
+document.getElementById('jumpFab').addEventListener('click', e => {
+  const b = e.target.closest('[data-edge]');
+  if(b) scrollToEdge(b.dataset.edge);
+});
 document.getElementById('nav').addEventListener('click', e => {
   const b = e.target.closest('[data-tab]');
-  if(b) setTab(b.dataset.tab);
+  if(!b) return;
+  // 再點一次目前所在的分頁：回到最上面（同 iOS App 的習慣）
+  if(b.dataset.tab === ui.tab){ scrollToEdge('top'); return; }
+  setTab(b.dataset.tab);
 });
 
 // ---------- 頂端 ----------
