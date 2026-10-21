@@ -261,6 +261,7 @@
         <option value="channel">依頻道</option>
         <option value="time">最緊急優先</option>
       </select>
+      <button class="btn-danger small-btn" id="clearChannelsBtn" data-act="clear-channels">全部清除</button>
     </div>
     <div class="legend" id="legend"></div>
     <div id="channelArea"></div>
@@ -909,6 +910,7 @@ function cardHTML(boss, ch, s, withId){
 function renderChannels(boss, st){
   document.querySelectorAll('#filterSeg [data-filter]').forEach(b => b.classList.toggle('on', b.dataset.filter === ui.filter));
   sortModeSelect.value = state.sortMode || 'channel';
+  document.getElementById('clearChannelsBtn').disabled = !boss || !Object.keys(boss.channels).length;
   if(!boss){
     legendEl.innerHTML = '';
     channelArea.innerHTML = '<div class="empty-hint">尚未設定任何王<br><button class="btn-primary" data-act="add-boss">+ 新增王</button></div>';
@@ -968,6 +970,16 @@ sortModeSelect.addEventListener('change', () => {
   renderAll();
 });
 channelArea.addEventListener('click', handleAct);
+document.getElementById('clearChannelsBtn').addEventListener('click', handleAct);
+
+// 一鍵清除所有頻道計時（累計擊殺數保留），用「復原」取代確認
+function clearChannelsQuick(){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  const count = Object.keys(boss.channels).length;
+  if(!count) return;
+  withUndo('已清除 ' + count + ' 個頻道的計時', b => { b.channels = {}; });
+}
 
 // ---------- 統計 ----------
 const stScope = document.getElementById('stScope');
@@ -1164,6 +1176,7 @@ function handleAct(e){
     case 'clear-all': clearAll(); break;
     case 'reset-counts': resetCounts(); break;
     case 'edit-count': openCountSheet(); break;
+    case 'clear-channels': clearChannelsQuick(); break;
     case 'export': exportData(); break;
     case 'import': importFile.click(); break;
   }
