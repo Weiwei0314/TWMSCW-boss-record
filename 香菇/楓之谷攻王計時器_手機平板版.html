@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>攻王計時器 行動版</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --text:#1c1f26; --muted:#6b7280; --border:#e2e4e9;
+    --idle:#eceef1; --idle-text:#6b7280;
+    /* 自己擊殺：綠色；別人擊殺：紫色 */
+    --me:#16a34a; --me-bg:#bbf7d0; --me-text:#14532d;
+    --other:#7c3aed; --other-bg:#e9d5ff; --other-text:#4c1d95;
+    --window-bg:#fef3c7; --window-text:#92400e; --window-border:#f59e0b;
+    --ready-bg:#fee2e2; --ready-text:#991b1b; --ready-border:#ef4444;
+    --accent:#2563eb; --accent-text:#ffffff; --danger:#dc2626;
+    --heat-rgb:234,88,12;
+    --nav-h:62px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14161b; --panel:#1d2027; --text:#e7e9ee; --muted:#9aa1ad; --border:#2b2f3a;
+      --idle:#2a2e38; --idle-text:#9aa1ad;
+      --me:#22c55e; --me-bg:#14532d; --me-text:#bbf7d0;
+      --other:#a78bfa; --other-bg:#3b1a6b; --other-text:#e9d5ff;
+      --window-bg:#4a3306; --window-text:#fcd34d; --window-border:#f59e0b;
+      --ready-bg:#4c1414; --ready-text:#fca5a5; --ready-border:#ef4444;
+      --accent:#3b82f6; --accent-text:#0b0f19; --danger:#f87171;
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px;line-height:1.4;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px);}
+  button,select,input{font:inherit;color:inherit;}
+  button{cursor:pointer;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:8px 12px;min-height:44px;touch-action:manipulation;}
+  button:active{filter:brightness(.9);}
+  button:disabled{opacity:.45;cursor:default;}
+  /* 16px 以上 iOS 點輸入框才不會自動放大 */
+  select,input[type=number],input[type=text],input[type=datetime-local]{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 10px;min-height:44px;font-size:16px;}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text);font-weight:700;}
+  .btn-danger{color:var(--danger);border-color:var(--danger);background:transparent;}
+  .btn-me{background:var(--me);border-color:var(--me);color:#fff;font-weight:700;}
+  .btn-other{background:var(--other);border-color:var(--other);color:#fff;font-weight:700;}
+  [hidden]{display:none!important;}
+
+  /* 頂端（固定） */
+  .top{position:sticky;top:0;z-index:30;background:var(--panel);border-bottom:1px solid var(--border);padding:calc(8px + env(safe-area-inset-top)) 12px 8px;}
+  .top-row{display:flex;gap:8px;align-items:center;max-width:1400px;margin:0 auto;}
+  .top-row select{flex:1;min-width:0;font-weight:700;}
+  .clock{font-variant-numeric:tabular-nums;font-weight:700;}
+  .icon-btn{padding:6px 10px;}
+  .icon-btn.on{background:var(--window-bg);border-color:var(--window-border);}
+  .stats{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:.85rem;margin:6px auto 0;color:var(--muted);max-width:1400px;}
+  .stats b{color:var(--text);font-variant-numeric:tabular-nums;font-size:1rem;}
+  .stats .s-me b{color:var(--me);}
+  .stats .s-other b{color:var(--other);}
+  .warn{margin:8px 12px 0;padding:10px 12px;border-radius:10px;background:var(--ready-bg);color:var(--ready-text);font-size:.85rem;}
+
+  .main{padding:12px;max-width:1400px;margin:0 auto;}
+  .view{display:none;}
+  body[data-tab=sweep] #viewSweep,
+  body[data-tab=channels] #viewChannels,
+  body[data-tab=stats] #viewStats,
+  body[data-tab=settings] #viewSettings{display:block;}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px;}
+  .panel h2{font-size:1rem;margin:0 0 10px;}
+  .label{font-size:.8rem;color:var(--muted);margin:12px 0 6px;}
+  .note{font-size:.78rem;color:var(--muted);margin:10px 0 0;}
+  .empty-hint{color:var(--muted);text-align:center;padding:24px 8px;}
+  .empty-hint button{margin-top:12px;}
+
+  /* 掃頻 */
+  .early{font-size:.88rem;font-variant-numeric:tabular-nums;margin-bottom:2px;}
+  .early.me b{color:var(--me);}
+  .early.other b{color:var(--other);}
+  .next-box{margin-top:10px;padding:12px;border-radius:12px;background:var(--idle);text-align:center;}
+  .next-label{font-size:.8rem;color:var(--muted);}
+  .next-ch{font-size:2.6rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;}
+  .next-state{font-size:.85rem;color:var(--muted);margin-bottom:10px;}
+  .next-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .next-actions button{min-height:50px;font-size:1rem;}
+  .next-actions [data-check]{grid-column:1 / -1;min-height:54px;font-size:1.05rem;}
+  .done-box{text-align:center;padding:16px 8px;}
+  .done-box div{font-size:1.1rem;font-weight:700;margin-bottom:10px;}
+  .ranges{display:flex;flex-wrap:wrap;gap:6px;font-variant-numeric:tabular-nums;}
+  .range-btn{min-height:38px;padding:4px 10px;font-weight:700;border-style:dashed;background:transparent;}
+  .ranges.prio .range-btn{border-color:var(--me);color:var(--me);}
+  .round-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.9rem;}
+  .round-ctl input{width:72px;text-align:center;-moz-appearance:textfield;appearance:textfield;}
+  .round-ctl input::-webkit-inner-spin-button,.round-ctl input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+  .round-ctl .pass-btn{flex:1;min-width:120px;}
+  .soon-list{display:flex;flex-direction:column;gap:6px;}
+  .soon-row{display:flex;align-items:center;border-radius:10px;border:1.5px solid transparent;background:var(--idle);font-variant-numeric:tabular-nums;}
+  .soon-jump{flex:1;display:flex;justify-content:space-between;gap:8px;padding:10px 12px;background:transparent;border:none;min-height:44px;text-align:left;color:inherit;font-weight:inherit;}
+  .soon-x{margin-right:6px;min-height:36px;padding:2px 12px;background:transparent;color:inherit;border-color:currentColor;}
+  .soon-row.window{background:var(--window-bg);color:var(--window-text);}
+  /* 最接近重生的那一筆：黃紅交替閃爍 */
+  .soon-row.top{font-weight:700;font-size:1.05rem;animation:soon-top 1s ease-in-out infinite;}
+  @keyframes soon-top{
+    0%,100%{background:var(--window-bg);color:var(--window-text);border-color:var(--window-border);}
+    50%{background:var(--ready-bg);color:var(--ready-text);border-color:var(--ready-border);}
+  }
+
+  /* 頻道 */
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;}
+  .seg{display:flex;gap:6px;overflow-x:auto;flex:1 1 260px;min-width:0;scrollbar-width:none;}
+  .seg::-webkit-scrollbar{display:none;}
+  .seg button{white-space:nowrap;border-radius:999px;min-height:38px;padding:4px 14px;font-size:.88rem;}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-text);font-weight:700;}
+  .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.78rem;color:var(--muted);margin-bottom:10px;}
+  .legend b{color:var(--text);}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;}
+  h3{font-size:.9rem;margin:14px 0 8px;color:var(--muted);}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .card{border:1.5px solid var(--border);border-left-width:6px;border-radius:12px;padding:10px;background:var(--panel);display:flex;flex-direction:column;gap:3px;scroll-margin-top:calc(var(--top-h,96px) + 12px);}
+  .card.idle{background:var(--idle);}
+  .card.me{border-left-color:var(--me);}
+  .card.other{border-left-color:var(--other);}
+  .card.waiting.me{background:var(--me-bg);border-color:var(--me);}
+  .card.waiting.other{background:var(--other-bg);border-color:var(--other);}
+  .card.window{background:var(--window-bg);border-top-color:var(--window-border);border-right-color:var(--window-border);border-bottom-color:var(--window-border);animation:pulse-amber 1.4s ease-in-out infinite;}
+  .card.ready{background:var(--ready-bg);border-top-color:var(--ready-border);border-right-color:var(--ready-border);border-bottom-color:var(--ready-border);animation:pulse-red 1.1s ease-in-out infinite;}
+  .card.flash{outline:3px solid var(--accent);outline-offset:2px;}
+  @keyframes pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.35);}50%{box-shadow:0 0 0 6px rgba(245,158,11,0);}}
+  @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45);}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);}}
+  .ch-head{display:flex;align-items:center;gap:6px;}
+  .ch-num{font-weight:800;font-size:1.05rem;}
+  .owner-badge{min-height:30px;padding:2px 10px;font-size:.78rem;font-weight:700;color:#fff;border:none;border-radius:8px;}
+  .owner-badge.me{background:var(--me);}
+  .owner-badge.other{background:var(--other);}
+  .pin-btn{margin-left:auto;min-height:34px;padding:2px 8px;opacity:.4;background:transparent;}
+  .pin-btn.on{opacity:1;border-color:var(--accent);}
+  .status-tag{font-size:.75rem;font-weight:700;}
+  .idle .status-tag{color:var(--idle-text);}
+  .waiting.me .status-tag,.waiting.me .countdown{color:var(--me-text);}
+  .waiting.other .status-tag,.waiting.other .countdown{color:var(--other-text);}
+  .window .status-tag,.window .countdown{color:var(--window-text);}
+  .ready .status-tag,.ready .countdown{color:var(--ready-text);}
+  .countdown{font-variant-numeric:tabular-nums;font-weight:800;font-size:1.25rem;}
+  .idle .countdown{color:var(--idle-text);font-size:.9rem;font-weight:400;}
+  .info-line{font-size:.72rem;color:var(--muted);min-height:1.1em;}
+  .waiting .info-line{color:inherit;opacity:.8;}
+  .card-actions{display:flex;gap:6px;margin-top:3px;}
+  .card-actions button{flex:1;padding:6px 4px;font-size:.9rem;}
+  .card-actions.sub button{min-height:36px;font-size:.8rem;}
+
+  /* 統計 */
+  .filter-row{display:flex;flex-wrap:wrap;gap:8px 12px;}
+  .filter-row .field{flex:1;min-width:120px;margin-bottom:0;}
+  .heat-top{font-size:.88rem;margin:10px 0 8px;line-height:1.6;}
+  .heat-top b{color:rgb(var(--heat-rgb));font-variant-numeric:tabular-nums;}
+  .heat-table{width:100%;border-collapse:separate;border-spacing:3px;table-layout:fixed;font-size:.78rem;font-variant-numeric:tabular-nums;}
+  .heat-table th{color:var(--muted);font-weight:600;padding:2px;text-align:center;}
+  .heat-table th.lbl{width:3.4em;text-align:right;padding-right:6px;}
+  .heat-table td{height:28px;text-align:center;border-radius:5px;color:var(--text);}
+  .heat-table td.zero{background:var(--idle);}
+  .heat-table td.gap,.heat-table th.gap{width:4px;padding:0;background:transparent;}
+  .heat-table tfoot td{color:var(--muted);background:transparent;font-weight:700;}
+  .daily-scroll{overflow-x:auto;}
+  .daily-table{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;}
+  .daily-table th,.daily-table td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .daily-table th:first-child,.daily-table td:first-child{text-align:left;}
+  .daily-table thead th{color:var(--muted);font-weight:600;}
+  .daily-table td.me{color:var(--me);font-weight:700;}
+  .daily-table td.other{color:var(--other);font-weight:700;}
+  .daily-table tr.today td{background:var(--idle);}
+  .daily-table td.cum{color:var(--muted);}
+
+  /* 設定 */
+  .btn-col{display:flex;flex-direction:column;gap:8px;}
+  .boss-info{font-size:.88rem;color:var(--muted);margin-bottom:10px;}
+  .boss-info b{color:var(--text);}
+
+  /* 底部分頁列 */
+  .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;background:var(--panel);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom);}
+  .nav-btn{flex:1;border:none;border-radius:0;background:transparent;min-height:var(--nav-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.75rem;color:var(--muted);}
+  .nav-btn .ic{font-size:1.3rem;line-height:1;}
+  .nav-btn.on{color:var(--accent);font-weight:700;}
+  .wide-only{display:none;}
+
+  /* 復原提示 */
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);z-index:45;display:flex;align-items:center;gap:12px;background:var(--text);color:var(--bg);padding:6px 6px 6px 16px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.9rem;width:max-content;max-width:calc(100% - 24px);}
+  .toast button{background:transparent;border-color:var(--bg);color:var(--bg);min-height:38px;font-weight:700;}
+
+  /* 底部彈出面板 */
+  .sheet-overlay{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;}
+  .sheet{background:var(--panel);width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto;}
+  .sheet h2{margin:0 0 14px;font-size:1.1rem;}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+  .field > label,.field > span{font-size:.85rem;color:var(--muted);}
+  .row2{display:flex;gap:8px;}
+  .row2 > *{flex:1;min-width:0;}
+  .radio-row{display:flex;gap:8px;}
+  .radio-row label{flex:1;display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;min-height:44px;color:var(--text);font-size:.95rem;}
+  .radio-row input{width:20px;height:20px;margin:0;}
+  .sheet-actions{display:flex;gap:8px;margin-top:16px;}
+  .sheet-actions button{flex:1;}
+  @media (min-width:600px){
+    .sheet-overlay{align-items:center;padding:16px;}
+    .sheet{border-radius:16px;}
+  }
+
+  /* 平板橫放／大螢幕：掃頻和頻道並排 */
+  @media (min-width:900px){
+    body[data-tab=sweep] .main,body[data-tab=channels] .main{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start;}
+    body[data-tab=sweep] #viewChannels,body[data-tab=channels] #viewSweep{display:block;}
+    #viewSweep{position:sticky;top:calc(var(--top-h,96px) + 12px);max-height:calc(100vh - var(--top-h,96px) - var(--nav-h) - 36px);overflow:auto;}
+    .nav-btn[data-tab=channels]{display:none;}
+    body[data-tab=channels] .nav-btn[data-tab=sweep]{color:var(--accent);font-weight:700;}
+    .wide-only{display:inline;}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr));}
+  }
+</style>
+</head>
+<body data-tab="sweep">
+
+<header class="top" id="topBar">
+  <div class="top-row">
+    <select id="bossSelect" aria-label="選擇王"></select>
+    <span class="clock" id="clock">--:--:--</span>
+    <button id="wakeBtn" class="icon-btn" title="螢幕常亮（不自動關螢幕）">🔆</button>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+<div class="warn" id="storageWarn" hidden>這個瀏覽器無法儲存紀錄（可能是無痕模式，或是在 App 的「預覽」裡開啟）。關掉頁面後紀錄會消失，請改用 Chrome／Safari 直接開啟。</div>
+
+<main class="main">
+  <!-- 掃頻 -->
+  <section class="view" id="viewSweep">
+    <div class="panel"><div id="sweepDyn"></div></div>
+    <div class="panel round-ctl" id="roundCtl">
+      <span>從</span><input type="number" id="startInput" inputmode="numeric" min="1" max="60"><span>頻開始</span>
+      <button class="pass-btn" data-pass="1">第一次・全掃</button>
+      <button class="pass-btn" data-pass="2">第二次・補掃</button>
+    </div>
+    <div class="panel" id="soonPanel">
+      <h2>⏰ 最接近重生</h2>
+      <div id="soonArea"></div>
+    </div>
+  </section>
+
+  <!-- 頻道 -->
+  <section class="view" id="viewChannels">
+    <div class="toolbar">
+      <div class="seg" id="filterSeg">
+        <button data-filter="all">全部</button>
+        <button data-filter="active">可打（區間＋已重生）</button>
+        <button data-filter="waiting">等待中</button>
+        <button data-filter="mine">我打的</button>
+      </div>
+      <select id="sortMode" aria-label="排序">
+        <option value="channel">依頻道</option>
+        <option value="time">最緊急優先</option>
+      </select>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div id="channelArea"></div>
+  </section>
+
+  <!-- 統計 -->
+  <section class="view" id="viewStats">
+    <div class="panel">
+      <div class="filter-row">
+        <div class="field"><span>統計範圍</span>
+          <select id="stScope"><option value="boss">目前這隻王</option><option value="all">所有王合計</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>🔥 擊殺時間熱點</h2>
+      <div class="filter-row">
+        <div class="field"><span>誰擊殺的</span>
+          <select id="stWho"><option value="all">全部</option><option value="me">只看自己</option><option value="other">只看別人</option></select>
+        </div>
+        <div class="field"><span>期間</span>
+          <select id="stRange"><option value="0">全部紀錄</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option></select>
+        </div>
+      </div>
+      <div id="heatBody"></div>
+      <p class="note">擊殺時間約等於「發現王已重生」的時間，所以熱點代表王大多在這些時段被找到。「別人擊殺」通常是掃到時才發現，誤差較大；想看重生時段建議選「只看自己」。時間以本機時區計算。</p>
+    </div>
+    <div class="panel">
+      <h2>📅 每日擊殺</h2>
+      <div id="dailyBody"></div>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section class="view" id="viewSettings">
+    <div class="panel">
+      <h2>王</h2>
+      <div class="boss-info" id="bossInfo"></div>
+      <div class="btn-col">
+        <button class="btn-primary" data-act="add-boss">+ 新增王</button>
+        <button data-act="edit-boss" class="need-boss">編輯目前的王</button>
+        <button data-act="delete-boss" class="btn-danger need-boss">刪除此王</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>紀錄</h2>
+      <div class="btn-col">
+        <button data-act="clear-all" class="btn-danger need-boss">清除全部頻道計時（累計數保留）</button>
+        <button data-act="reset-counts" class="btn-danger need-boss">累計擊殺數歸零（頻道計時保留）</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>備份／搬移資料</h2>
+      <div class="btn-col">
+        <button data-act="export">⬇️ 匯出備份（.json）</button>
+        <button data-act="import">⬆️ 匯入備份（會取代目前資料）</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <p class="note">紀錄存在這台裝置的瀏覽器裡，不會自動跟其他裝置同步。換裝置或清除瀏覽器資料前，請先匯出備份。</p>
+    </div>
+  </section>
+</main>
+
+<nav class="nav" id="nav">
+  <button class="nav-btn" data-tab="sweep"><span class="ic">🧭</span><span>掃頻<span class="wide-only">・頻道</span></span></button>
+  <button class="nav-btn" data-tab="channels"><span class="ic">🔢</span><span>頻道</span></button>
+  <button class="nav-btn" data-tab="stats"><span class="ic">📊</span><span>統計</span></button>
+  <button class="nav-btn" data-tab="settings"><span class="ic">⚙️</span><span>設定</span></button>
+</nav>
+
+<div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo">復原</button></div>
+
+<!-- 新增／編輯王 -->
+<div class="sheet-overlay" id="bossSheet" hidden>
+  <div class="sheet">
+    <h2 id="bossSheetTitle">新增王</h2>
+    <div class="field">
+      <label for="bossNameInput">王的名稱</label>
+      <input type="text" id="bossNameInput" placeholder="例如：潛水艇哥布林王">
+    </div>
+    <div class="field">
+      <span>重生時間類型</span>
+      <div class="radio-row">
+        <label><input type="radio" name="respawnType" value="fixed" checked> 固定時間</label>
+        <label><input type="radio" name="respawnType" value="range"> 區間隨機</label>
+      </div>
+    </div>
+    <div id="fixedFields">
+      <div class="field">
+        <span>固定重生時間（小時／分鐘）</span>
+        <div class="row2">
+          <input type="number" id="fixedHour" inputmode="numeric" min="0" placeholder="小時" value="2">
+          <input type="number" id="fixedMinute" inputmode="numeric" min="0" max="59" placeholder="分鐘" value="0">
+        </div>
+      </div>
+    </div>
+    <div id="rangeFields" hidden>
+      <div class="field">
+        <span>最短重生時間（小時／分鐘）</span>
+        <div class="row2">
+          <input type="number" id="minHour" inputmode="numeric" min="0" placeholder="小時" value="2">
+          <input type="number" id="minMinute" inputmode="numeric" min="0" max="59" placeholder="分鐘" value="0">
+        </div>
+      </div>
+      <div class="field">
+        <span>最長重生時間（小時／分鐘）</span>
+        <div class="row2">
+          <input type="number" id="maxHour" inputmode="numeric" min="0" placeholder="小時" value="3">
+          <input type="number" id="maxMinute" inputmode="numeric" min="0" max="59" placeholder="分鐘" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button id="bossSheetCancel">取消</button>
+      <button id="bossSheetSave" class="btn-primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 手動設定擊殺時間 -->
+<div class="sheet-overlay" id="timeSheet" hidden>
+  <div class="sheet">
+    <h2>手動設定擊殺時間 - <span id="timeSheetChannel"></span></h2>
+    <div class="field">
+      <label for="manualTimeInput">擊殺時間</label>
+      <input type="datetime-local" id="manualTimeInput">
+    </div>
+    <div class="field">
+      <span>誰擊殺的</span>
+      <div class="radio-row">
+        <label><input type="radio" name="timeOwner" value="me" checked> 自己</label>
+        <label><input type="radio" name="timeOwner" value="other"> 別人</label>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button id="timeSheetCancel">取消</button>
+      <button id="timeSheetSave" class="btn-primary">套用</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 與電腦版共用同一份資料格式與儲存鍵；同一個瀏覽器開兩版會看到同樣的紀錄
+const STORAGE_KEY = 'maple_boss_timer_v1';
+const UI_KEY = 'maple_boss_timer_mobile_ui';
+const CHANNEL_COUNT = 60;
+
+// ---------- 儲存（無痕模式或 App 內預覽可能無法寫入） ----------
+let storageOK = true;
+function readStore(key){
+  try{ return localStorage.getItem(key); }catch(e){ storageOK = false; return null; }
+}
+function writeStore(key, val){
+  try{ localStorage.setItem(key, val); }
+  catch(e){ storageOK = false; document.getElementById('storageWarn').hidden = false; }
+}
+
+function genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+// 舊版資料：channels[ch] = 時間戳記 → 新版：{ ts, by, logId }，並建立擊殺紀錄 kills[]
+function migrate(s){
+  s.bosses = s.bosses || [];
+  s.bosses.forEach(b => {
+    b.channels = b.channels || {};
+    b.kills = b.kills || [];
+    b.pinned = b.pinned || [];
+    b.round = b.round || { start: CHANNEL_COUNT, checked: [] };
+    b.round.checked = b.round.checked || [];
+    b.round.pass = b.round.pass || 1;
+    b.dismissed = b.dismissed || [];
+    Object.keys(b.channels).forEach(ch => {
+      const v = b.channels[ch];
+      if(typeof v === 'number'){
+        const id = genId() + ch;
+        b.channels[ch] = { ts: v, by: 'me', logId: id };
+        b.kills.push({ id, ch: Number(ch), ts: v, by: 'me' });
+      }
+    });
+  });
+  return s;
+}
+
+function loadState(){
+  try{
+    const raw = readStore(STORAGE_KEY);
+    if(raw) return migrate(JSON.parse(raw));
+  }catch(e){}
+  return { bosses: [], activeBossId: null, sortMode: 'channel' };
+}
+function saveState(){ writeStore(STORAGE_KEY, JSON.stringify(state)); }
+
+function loadUI(){
+  try{
+    const u = JSON.parse(readStore(UI_KEY) || '{}');
+    return { tab: u.tab || 'sweep', filter: u.filter || 'all' };
+  }catch(e){ return { tab: 'sweep', filter: 'all' }; }
+}
+function saveUI(){ writeStore(UI_KEY, JSON.stringify(ui)); }
+
+let state = loadState();
+let ui = loadUI();
+
+function getActiveBoss(){ return state.bosses.find(b => b.id === state.activeBossId) || null; }
+
+// ---------- 小工具 ----------
+function pad(n){ return String(n).padStart(2,'0'); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function formatClock(d){ return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+function formatDuration(ms){
+  if(ms < 0) ms = 0;
+  const t = Math.floor(ms/1000);
+  return pad(Math.floor(t/3600))+':'+pad(Math.floor((t%3600)/60))+':'+pad(t%60);
+}
+function toLocalDatetimeInputValue(ts){
+  const d = new Date(ts);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function fmtMinutes(m){ return Math.floor(m/60) + ':' + pad(m%60); }
+function vibrate(){ try{ if(navigator.vibrate) navigator.vibrate(25); }catch(e){} }
+
+function computeStatus(boss, killTs, nowMs){
+  if(killTs == null) return { state:'idle' };
+  if(boss.respawnType === 'fixed'){
+    const respawnAt = killTs + boss.fixedMinutes*60000;
+    if(nowMs < respawnAt) return { state:'waiting', targetTime: respawnAt, remainingMs: respawnAt - nowMs };
+    return { state:'ready', overdueMs: nowMs - respawnAt };
+  }
+  const minAt = killTs + boss.minMinutes*60000;
+  const maxAt = killTs + boss.maxMinutes*60000;
+  if(nowMs < minAt) return { state:'waiting', targetTime:minAt, remainingMs: minAt-nowMs, maxTime:maxAt };
+  if(nowMs <= maxAt) return { state:'window', targetTime:maxAt, remainingMs: maxAt-nowMs };
+  return { state:'ready', overdueMs: nowMs - maxAt };
+}
+function computeAll(boss, now){
+  const st = {};
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const rec = boss.channels[ch];
+    st[ch] = computeStatus(boss, rec ? rec.ts : null, now);
+  }
+  return st;
+}
+
+// ---------- 擊殺紀錄 ----------
+function addKill(boss, ch, ts, by){
+  const id = genId();
+  boss.kills.push({ id, ch, ts, by });
+  boss.channels[ch] = { ts, by, logId: id };
+  // 重新擊殺過的頻道，等王重生後要再回到掃頻清單
+  boss.round.checked = boss.round.checked.filter(c => c !== ch);
+}
+function findLog(boss, rec){ return rec ? boss.kills.find(k => k.id === rec.logId) : null; }
+function countKills(boss){
+  let me = 0, other = 0;
+  boss.kills.forEach(k => { if(k.by === 'me') me++; else other++; });
+  return { me, other, total: me + other };
+}
+// 以本機時間午夜 00:00 為一天的分界
+function dayKey(ts){
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+}
+function countToday(boss){
+  const today = dayKey(Date.now());
+  let me = 0, other = 0;
+  boss.kills.forEach(k => { if(dayKey(k.ts) !== today) return; if(k.by === 'me') me++; else other++; });
+  return { me, other };
+}
+function dailyRows(kills){
+  const byDay = {};
+  kills.forEach(k => {
+    const key = dayKey(k.ts);
+    const d = byDay[key] || (byDay[key] = { day: key, me: 0, other: 0 });
+    if(k.by === 'me') d.me++; else d.other++;
+  });
+  const rows = Object.values(byDay).sort((a, b) => a.day < b.day ? -1 : 1);
+  let cumMe = 0, cumAll = 0;
+  rows.forEach(r => {
+    r.total = r.me + r.other;
+    cumMe += r.me; cumAll += r.total;
+    r.cumMe = cumMe; r.cumAll = cumAll;
+  });
+  return rows.reverse();
+}
+
+// ---------- 復原（手機容易誤觸，單筆操作改用「復原」取代確認視窗） ----------
+const toastEl = document.getElementById('toast');
+const toastMsg = document.getElementById('toastMsg');
+let undo = null, toastTimer = null;
+
+function pushUndo(bossId, snap, msg){
+  undo = { bossId, snap };
+  toastMsg.textContent = msg;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 6000);
+}
+function hideToast(){ toastEl.hidden = true; undo = null; }
+document.getElementById('toastUndo').addEventListener('click', () => {
+  if(!undo) return;
+  const i = state.bosses.findIndex(b => b.id === undo.bossId);
+  if(i >= 0) state.bosses[i] = JSON.parse(undo.snap);
+  hideToast();
+  saveState();
+  renderAll();
+});
+
+// 執行會改動目前這隻王的操作，並提供復原
+function withUndo(msg, fn){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  const snap = JSON.stringify(boss);
+  fn(boss);
+  saveState();
+  pushUndo(boss.id, snap, msg);
+  renderAll();
+}
+
+// ---------- 頻道操作 ----------
+function kill(ch, by){
+  withUndo('已記錄 ' + ch + ' 頻（' + (by === 'me' ? '我' : '別人') + '擊殺）', boss => addKill(boss, ch, Date.now(), by));
+  vibrate();
+}
+function toggleOwner(ch){
+  withUndo(ch + ' 頻已改為另一方擊殺', boss => {
+    const rec = boss.channels[ch];
+    if(!rec) return;
+    rec.by = rec.by === 'me' ? 'other' : 'me';
+    const log = findLog(boss, rec);
+    if(log) log.by = rec.by;
+  });
+}
+// 視為按錯：一併從累計擊殺數扣掉
+function clearChannel(ch){
+  withUndo('已清除 ' + ch + ' 頻這筆擊殺', boss => {
+    const rec = boss.channels[ch];
+    if(rec) boss.kills = boss.kills.filter(k => k.id !== rec.logId);
+    delete boss.channels[ch];
+  });
+}
+function togglePin(ch){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  const i = boss.pinned.indexOf(ch);
+  if(i >= 0) boss.pinned.splice(i, 1); else boss.pinned.push(ch);
+  saveState();
+  renderAll();
+}
+function jumpToChannel(ch){
+  if(ui.filter !== 'all'){ ui.filter = 'all'; saveUI(); renderAll(); }
+  if(window.innerWidth < 900) setTab('channels');
+  const el = document.getElementById('card-ch-' + ch);
+  if(!el) return;
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1500);
+}
+
+// ---------- 分頁 ----------
+function setTab(tab){
+  ui.tab = tab;
+  document.body.dataset.tab = tab;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  saveUI();
+  if(tab === 'stats') renderStatsView();
+  window.scrollTo(0, 0);
+}
+document.getElementById('nav').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]');
+  if(b) setTab(b.dataset.tab);
+});
+
+// ---------- 頂端 ----------
+const bossSelect = document.getElementById('bossSelect');
+const statsEl = document.getElementById('stats');
+
+function renderBossSelector(){
+  if(!state.bosses.length){
+    bossSelect.innerHTML = '<option>尚無王，請到「設定」新增</option>';
+    bossSelect.disabled = true;
+    return;
+  }
+  bossSelect.disabled = false;
+  bossSelect.innerHTML = state.bosses.map(b =>
+    '<option value="' + esc(b.id) + '"' + (b.id === state.activeBossId ? ' selected' : '') + '>' + esc(b.name) + '</option>'
+  ).join('');
+}
+bossSelect.addEventListener('change', () => {
+  state.activeBossId = bossSelect.value;
+  hideToast();
+  saveState();
+  renderAll();
+});
+
+function renderStats(boss){
+  if(!boss){ statsEl.innerHTML = ''; return; }
+  const t = countToday(boss), c = countKills(boss);
+  statsEl.innerHTML = '<span class="s-me">今天我 <b>' + t.me + '</b></span>'
+    + '<span class="s-other">今天別人 <b>' + t.other + '</b></span>'
+    + '<span>累積我 <b>' + c.me + '</b> / 合計 <b>' + c.total + '</b></span>';
+}
+
+// ---------- 掃頻 ----------
+const sweepDyn = document.getElementById('sweepDyn');
+const soonArea = document.getElementById('soonArea');
+const roundCtl = document.getElementById('roundCtl');
+const soonPanel = document.getElementById('soonPanel');
+const startInput = document.getElementById('startInput');
+const STATE_LABEL = { idle:'尚未記錄', waiting:'等待重生', window:'重生區間中', ready:'王已重生' };
+
+function clampCh(v){
+  const n = Math.round(Number(v));
+  if(!n || n < 1) return 1;
+  return Math.min(n, CHANNEL_COUNT);
+}
+// 掃頻順序：從起始頻道往 1 頻倒數，再從 60 頻繞回起始頻道的上一頻
+function sweepOrder(start){
+  const order = [];
+  for(let ch = start; ch >= 1; ch--) order.push(ch);
+  for(let ch = CHANNEL_COUNT; ch > start; ch--) order.push(ch);
+  return order;
+}
+// 連續頻道合併成區段（例：60–56、54–6），每段是按鈕，點一下略過整段
+function rangesHTML(list){
+  const out = [];
+  for(let i = 0; i < list.length; ){
+    let j = i;
+    while(j + 1 < list.length && list[j + 1] === list[j] - 1) j++;
+    const label = i === j ? String(list[i]) : list[i] + '–' + list[j];
+    out.push('<button class="range-btn" data-check="' + list.slice(i, j + 1).join(',') + '">' + label + '</button>');
+    i = j + 1;
+  }
+  return out.join('');
+}
+function soonText(s){
+  return s.state === 'window' ? '區間中 · 最晚 ' + formatDuration(s.remainingMs) : formatDuration(s.remainingMs);
+}
+
+function renderSweep(boss, st){
+  if(!boss){
+    sweepDyn.innerHTML = '<div class="empty-hint">尚未設定任何王<br><button class="btn-primary" data-act="add-boss">+ 新增王</button></div>';
+    roundCtl.hidden = true;
+    soonPanel.hidden = true;
+    return;
+  }
+  roundCtl.hidden = false;
+  soonPanel.hidden = false;
+
+  const r = boss.round;
+  const start = r.start || CHANNEL_COUNT;
+  // 要掃的頻道：扣掉等待重生中（已被打掉）與本輪看過沒王的
+  const todo = sweepOrder(start).filter(ch => st[ch].state !== 'waiting' && !r.checked.includes(ch));
+  // 我上次打過、現在已重生（區間中或已重生）的頻道優先掃
+  const isMine = ch => boss.channels[ch] && boss.channels[ch].by === 'me';
+  const prio = todo.filter(isMine);
+  const rest = todo.filter(ch => !isMine(ch));
+  const next = prio.length ? prio[0] : rest[0];
+
+  // 我 / 別人打掉的王，下次最早重生時間
+  const earliest = { me: null, other: null };
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const s = st[ch];
+    if(s.state !== 'waiting') continue;
+    const by = boss.channels[ch].by;
+    if(!earliest[by] || s.targetTime < earliest[by].t) earliest[by] = { t: s.targetTime, ms: s.remainingMs, ch };
+  }
+  const earlyLine = (by, label) => {
+    const e = earliest[by];
+    return '<div class="early ' + by + '">' + label + ' 最早重生：'
+      + (e ? '<b>' + formatClock(new Date(e.t)) + '</b>（<span data-t="early" data-ch="' + e.ch + '">' + formatDuration(e.ms) + '</span> 後 · ' + e.ch + ' 頻）' : '—')
+      + '</div>';
+  };
+
+  const passLabel = r.pass === 2 ? '第二次・補掃沒被打掉的' : '第一次・60 頻全掃';
+  let sweep;
+  if(todo.length){
+    const ns = st[next];
+    const nrec = boss.channels[next];
+    const nstate = STATE_LABEL[ns.state] + (nrec ? '（上次' + (nrec.by === 'me' ? '我' : '別人') + '打）' : '');
+    sweep = '<div class="next-box">'
+      + '<div class="next-label">下一個要看</div>'
+      + '<div class="next-ch">' + next + ' 頻</div>'
+      + '<div class="next-state">' + nstate + '</div>'
+      + '<div class="next-actions">'
+      + '<button class="btn-me" data-act="kill-me" data-ch="' + next + '">我擊殺</button>'
+      + '<button class="btn-other" data-act="kill-other" data-ch="' + next + '">別人擊殺</button>'
+      + '<button class="btn-primary" data-check="' + next + '">沒王 ✓ 下一個</button>'
+      + '</div></div>'
+      + '<div class="label">' + passLabel + ' · 剩 ' + todo.length + ' 頻 · 點區段可整段略過</div>'
+      + (prio.length ? '<div class="label">⭐ 先掃（我打過、已重生）</div><div class="ranges prio">' + rangesHTML(prio) + '</div>' : '')
+      + (rest.length ? (prio.length ? '<div class="label">其他頻道</div>' : '') + '<div class="ranges">' + rangesHTML(rest) + '</div>' : '');
+  } else if(r.pass === 2){
+    sweep = '<div class="done-box"><div>兩次都掃完了 🎉</div><button class="btn-primary" data-pass="1">開始新一輪（第一次・全掃）</button></div>';
+  } else {
+    sweep = '<div class="done-box"><div>第一次掃完了</div><button class="btn-primary" data-pass="2">開始第二次（補掃沒被打掉的）</button></div>';
+  }
+  sweepDyn.innerHTML = earlyLine('me', '🟢 我打的') + earlyLine('other', '🟣 別人打的') + sweep;
+
+  // 最接近重生：區間中的排最前，再依剩餘時間由短到長；手動移除的區間頻道不列出
+  const soon = [];
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const s = st[ch];
+    if(s.state === 'window' && boss.dismissed.includes(boss.channels[ch].logId)) continue;
+    if(s.state === 'waiting' || s.state === 'window') soon.push({ ch, s });
+  }
+  soon.sort((a, b) => {
+    if(a.s.state !== b.s.state) return a.s.state === 'window' ? -1 : 1;
+    return a.s.remainingMs - b.s.remainingMs;
+  });
+  soonArea.innerHTML = soon.length
+    ? '<div class="soon-list">' + soon.slice(0, 5).map((it, i) => {
+        const by = boss.channels[it.ch].by === 'me' ? '我' : '別人';
+        const isWin = it.s.state === 'window';
+        return '<div class="soon-row ' + it.s.state + (i === 0 ? ' top' : '') + '">'
+          + '<button class="soon-jump" data-jump="' + it.ch + '"><span>' + it.ch + ' 頻（' + by + '）</span><span data-t="soon" data-ch="' + it.ch + '">' + soonText(it.s) + '</span></button>'
+          + (isWin ? '<button class="soon-x" data-dismiss="' + it.ch + '" aria-label="還沒重生，先移除">✕</button>' : '')
+          + '</div>';
+      }).join('') + '</div>'
+    : '<div class="note">目前沒有等待重生的頻道</div>';
+
+  document.querySelectorAll('.pass-btn').forEach(b => b.classList.toggle('btn-primary', Number(b.dataset.pass) === (r.pass || 1)));
+  if(document.activeElement !== startInput) startInput.value = r.start;
+}
+
+// 切換第一次 / 第二次：本輪看過的紀錄歸零。
+// 第二次的清單自然就是「沒被打掉的頻道」，因為打掉的都在等待重生中
+function setPass(pass){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  boss.round.start = clampCh(startInput.value || boss.round.start);
+  boss.round.pass = pass;
+  boss.round.checked = [];
+  saveState();
+  renderAll();
+}
+
+document.getElementById('viewSweep').addEventListener('click', e => {
+  const boss = getActiveBoss();
+  const ok = e.target.closest('[data-check]');
+  if(ok && boss){
+    const chs = ok.dataset.check.split(',').map(Number);
+    withUndo(chs.length > 1 ? '已略過 ' + ok.textContent + ' 頻' : chs[0] + ' 頻看過沒王', b => {
+      chs.forEach(ch => { if(!b.round.checked.includes(ch)) b.round.checked.push(ch); });
+    });
+    return;
+  }
+  const pass = e.target.closest('[data-pass]');
+  if(pass){ setPass(Number(pass.dataset.pass)); return; }
+  // 區間中但其實還沒重生：從「最接近重生」移除，讓後面的頻道顯示出來
+  const dis = e.target.closest('[data-dismiss]');
+  if(dis && boss){
+    const rec = boss.channels[Number(dis.dataset.dismiss)];
+    if(rec){
+      withUndo(dis.dataset.dismiss + ' 頻已從清單移除', b => {
+        const live = Object.values(b.channels).map(x => x.logId);
+        b.dismissed = b.dismissed.filter(id => live.includes(id));
+        b.dismissed.push(rec.logId);
+      });
+    }
+    return;
+  }
+  const jump = e.target.closest('[data-jump]');
+  if(jump){ jumpToChannel(Number(jump.dataset.jump)); return; }
+  handleAct(e);
+});
+startInput.addEventListener('change', () => {
+  const boss = getActiveBoss();
+  if(!boss) return;
+  boss.round.start = clampCh(startInput.value);
+  startInput.value = boss.round.start;
+  saveState();
+  renderAll();
+});
+
+// ---------- 頻道 ----------
+const channelArea = document.getElementById('channelArea');
+const sortModeSelect = document.getElementById('sortMode');
+const legendEl = document.getElementById('legend');
+
+function cardTexts(boss, ch, s){
+  const rec = boss.channels[ch];
+  if(s.state === 'idle') return { info:'', cd:'--:--:--' };
+  const k = formatClock(new Date(rec.ts));
+  if(s.state === 'waiting') return {
+    info: '擊殺 ' + k + ' · 預計 ' + formatClock(new Date(s.targetTime)) + (boss.respawnType === 'range' ? '~' + formatClock(new Date(s.maxTime)) : ''),
+    cd: formatDuration(s.remainingMs)
+  };
+  if(s.state === 'window') return { info: '擊殺 ' + k + ' · 最晚 ' + formatClock(new Date(s.targetTime)), cd: formatDuration(s.remainingMs) + ' 內' };
+  return { info: '擊殺 ' + k + ' · 已超時', cd: '+' + formatDuration(s.overdueMs) };
+}
+
+function cardHTML(boss, ch, s, withId){
+  const rec = boss.channels[ch];
+  const pinned = boss.pinned.includes(ch);
+  const t = cardTexts(boss, ch, s);
+  return '<div class="card ' + s.state + (rec ? ' ' + rec.by : '') + '"' + (withId ? ' id="card-ch-' + ch + '"' : '') + '>'
+    + '<div class="ch-head"><span class="ch-num">' + ch + ' 頻</span>'
+    + (rec ? '<button class="owner-badge ' + rec.by + '" data-act="owner" data-ch="' + ch + '" title="切換 自己／別人">' + (rec.by === 'me' ? '我' : '別人') + '</button>' : '')
+    + '<button class="pin-btn' + (pinned ? ' on' : '') + '" data-act="pin" data-ch="' + ch + '" aria-label="' + (pinned ? '取消置頂' : '置頂') + '">📌</button></div>'
+    + '<div class="status-tag">' + STATE_LABEL[s.state] + '</div>'
+    + '<div class="countdown" data-t="cd" data-ch="' + ch + '">' + t.cd + '</div>'
+    + '<div class="info-line" data-t="info" data-ch="' + ch + '">' + t.info + '</div>'
+    + '<div class="card-actions">'
+    + '<button class="btn-me" data-act="kill-me" data-ch="' + ch + '">我擊殺</button>'
+    + '<button class="btn-other" data-act="kill-other" data-ch="' + ch + '">別人</button></div>'
+    + '<div class="card-actions sub"><button data-act="time" data-ch="' + ch + '">✎ 時間</button>'
+    + (rec ? '<button class="btn-danger" data-act="clear" data-ch="' + ch + '">清除</button>' : '')
+    + '</div></div>';
+}
+
+function renderChannels(boss, st){
+  document.querySelectorAll('#filterSeg [data-filter]').forEach(b => b.classList.toggle('on', b.dataset.filter === ui.filter));
+  sortModeSelect.value = state.sortMode || 'channel';
+  if(!boss){
+    legendEl.innerHTML = '';
+    channelArea.innerHTML = '<div class="empty-hint">尚未設定任何王<br><button class="btn-primary" data-act="add-boss">+ 新增王</button></div>';
+    return;
+  }
+
+  let cntWindow = 0, cntReady = 0, cntWaiting = 0;
+  let items = [];
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
+    const s = st[ch];
+    if(s.state === 'window') cntWindow++;
+    else if(s.state === 'ready') cntReady++;
+    else if(s.state === 'waiting') cntWaiting++;
+    items.push({ ch, s });
+  }
+  legendEl.innerHTML = '<span><span class="dot" style="background:var(--me)"></span>自己</span>'
+    + '<span><span class="dot" style="background:var(--other)"></span>別人</span>'
+    + '<span><span class="dot" style="background:var(--window-border)"></span>區間中 <b>' + cntWindow + '</b></span>'
+    + '<span><span class="dot" style="background:var(--ready-border)"></span>已重生 <b>' + cntReady + '</b></span>'
+    + '<span>等待中 <b>' + cntWaiting + '</b></span>';
+
+  if(ui.filter === 'active') items = items.filter(it => it.s.state === 'window' || it.s.state === 'ready');
+  else if(ui.filter === 'waiting') items = items.filter(it => it.s.state === 'waiting');
+  else if(ui.filter === 'mine') items = items.filter(it => boss.channels[it.ch] && boss.channels[it.ch].by === 'me');
+
+  const priority = { ready:0, window:1, waiting:2, idle:3 };
+  if(state.sortMode === 'time'){
+    items.sort((a, b) => {
+      if(priority[a.s.state] !== priority[b.s.state]) return priority[a.s.state] - priority[b.s.state];
+      if(a.s.state === 'ready') return (b.s.overdueMs || 0) - (a.s.overdueMs || 0);
+      if(a.s.state === 'window' || a.s.state === 'waiting') return (a.s.remainingMs || 0) - (b.s.remainingMs || 0);
+      return a.ch - b.ch;
+    });
+  }
+
+  let html = '';
+  const pinned = boss.pinned.filter(ch => ch >= 1 && ch <= CHANNEL_COUNT);
+  if(ui.filter === 'all' && pinned.length){
+    html += '<h3>📌 置頂頻道</h3><div class="grid">' + pinned.map(ch => cardHTML(boss, ch, st[ch], false)).join('') + '</div><h3>全部頻道</h3>';
+  }
+  html += items.length
+    ? '<div class="grid">' + items.map(it => cardHTML(boss, it.ch, it.s, true)).join('') + '</div>'
+    : '<div class="empty-hint">沒有符合這個篩選的頻道</div>';
+  channelArea.innerHTML = html;
+}
+
+document.getElementById('filterSeg').addEventListener('click', e => {
+  const b = e.target.closest('[data-filter]');
+  if(!b) return;
+  ui.filter = b.dataset.filter;
+  saveUI();
+  renderAll();
+});
+sortModeSelect.addEventListener('change', () => {
+  state.sortMode = sortModeSelect.value;
+  saveState();
+  renderAll();
+});
+channelArea.addEventListener('click', handleAct);
+
+// ---------- 統計 ----------
+const stScope = document.getElementById('stScope');
+const stWho = document.getElementById('stWho');
+const stRange = document.getElementById('stRange');
+const heatBody = document.getElementById('heatBody');
+const dailyBody = document.getElementById('dailyBody');
+// 週一排第一欄；getDay() 的 0 是週日
+const HEAT_DAYS = [1,2,3,4,5,6,0];
+const WEEKDAY = ['日','一','二','三','四','五','六'];
+
+function scopeKills(){
+  const boss = getActiveBoss();
+  return stScope.value === 'all' ? state.bosses.flatMap(b => b.kills) : (boss ? boss.kills : []);
+}
+function heatCell(n, max){
+  if(!n) return '<td class="zero"></td>';
+  const r = n / max;
+  return '<td style="background:rgba(var(--heat-rgb),' + (0.15 + 0.85*r).toFixed(2) + ')' + (r > 0.55 ? ';color:#fff' : '') + '">' + n + '</td>';
+}
+function hourLabel(h){ return pad(h) + ':00–' + pad((h+1)%24) + ':00'; }
+
+// 手機直式較窄，所以表格轉置：每列一個小時、每欄一個星期
+function renderHeat(){
+  let kills = scopeKills();
+  if(stWho.value !== 'all') kills = kills.filter(k => k.by === stWho.value);
+  const days = Number(stRange.value);
+  if(days){
+    const since = Date.now() - days*86400000;
+    kills = kills.filter(k => k.ts >= since);
+  }
+  if(!kills.length){
+    heatBody.innerHTML = '<div class="empty-hint">這個範圍內沒有擊殺紀錄</div>';
+    return;
+  }
+  const grid = Array.from({ length: 24 }, () => new Array(7).fill(0));
+  const byHour = new Array(24).fill(0);
+  const byDay = new Array(7).fill(0);
+  kills.forEach(k => {
+    const d = new Date(k.ts);
+    grid[d.getHours()][d.getDay()]++;
+    byHour[d.getHours()]++;
+    byDay[d.getDay()]++;
+  });
+  const maxCell = Math.max(...grid.flat());
+  const maxHour = Math.max(...byHour);
+
+  const top = byHour.map((n, h) => ({ h, n })).filter(x => x.n).sort((a, b) => b.n - a.n).slice(0, 3);
+  let html = '<div class="heat-top">共 ' + kills.length + ' 筆 · 最常出現：'
+    + top.map(x => '<b>' + hourLabel(x.h) + '</b>（' + x.n + ' 隻，' + Math.round(x.n / kills.length * 100) + '%）').join('、')
+    + '</div>';
+  html += '<table class="heat-table"><thead><tr><th class="lbl"></th>'
+    + HEAT_DAYS.map(dw => '<th>' + WEEKDAY[dw] + '</th>').join('')
+    + '<th class="gap"></th><th>合計</th></tr></thead><tbody>';
+  for(let h = 0; h < 24; h++){
+    html += '<tr><th class="lbl">' + pad(h) + '時</th>'
+      + HEAT_DAYS.map(dw => heatCell(grid[h][dw], maxCell)).join('')
+      + '<td class="gap"></td>' + heatCell(byHour[h], maxHour) + '</tr>';
+  }
+  html += '</tbody><tfoot><tr><th class="lbl">合計</th>'
+    + HEAT_DAYS.map(dw => '<td>' + byDay[dw] + '</td>').join('')
+    + '<td class="gap"></td><td>' + kills.length + '</td></tr></tfoot></table>';
+  heatBody.innerHTML = html;
+}
+
+function renderDaily(){
+  const rows = dailyRows(scopeKills());
+  if(!rows.length){
+    dailyBody.innerHTML = '<div class="empty-hint">還沒有任何擊殺紀錄</div>';
+    return;
+  }
+  const today = dayKey(Date.now());
+  const thisYear = today.slice(0, 4);
+  dailyBody.innerHTML = '<div class="daily-scroll"><table class="daily-table">'
+    + '<thead><tr><th>日期</th><th>我</th><th>別人</th><th>合計</th><th>累積我</th><th>累積合計</th></tr></thead><tbody>'
+    + rows.map(r => {
+        const wd = WEEKDAY[new Date(r.day + 'T00:00').getDay()];
+        const label = (r.day.slice(0, 4) === thisYear ? r.day.slice(5) : r.day) + '（' + wd + '）';
+        return '<tr' + (r.day === today ? ' class="today"' : '') + '>'
+          + '<td>' + label + (r.day === today ? ' 今天' : '') + '</td>'
+          + '<td class="me">' + r.me + '</td>'
+          + '<td class="other">' + r.other + '</td>'
+          + '<td>' + r.total + '</td>'
+          + '<td class="cum">' + r.cumMe + '</td>'
+          + '<td class="cum">' + r.cumAll + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+function renderStatsView(){
+  if(ui.tab !== 'stats') return;
+  renderHeat();
+  renderDaily();
+}
+[stScope, stWho, stRange].forEach(el => el.addEventListener('change', renderStatsView));
+
+// ---------- 設定 ----------
+const bossInfo = document.getElementById('bossInfo');
+const importFile = document.getElementById('importFile');
+
+function renderSettings(boss){
+  document.querySelectorAll('.need-boss').forEach(b => b.disabled = !boss);
+  if(!boss){ bossInfo.textContent = '尚未設定任何王'; return; }
+  const rule = boss.respawnType === 'fixed'
+    ? '固定 ' + fmtMinutes(boss.fixedMinutes) + ' 重生'
+    : '區間 ' + fmtMinutes(boss.minMinutes) + '～' + fmtMinutes(boss.maxMinutes) + ' 隨機重生';
+  bossInfo.innerHTML = '目前：<b>' + esc(boss.name) + '</b> · ' + rule;
+}
+
+document.getElementById('viewSettings').addEventListener('click', handleAct);
+
+function clearAll(){
+  const b = getActiveBoss();
+  if(!b) return;
+  const count = Object.keys(b.channels).length;
+  if(count === 0){ alert('目前沒有任何頻道計時可清除。'); return; }
+  if(!confirm('確定要清除「' + b.name + '」全部 ' + count + ' 個頻道的計時嗎？\n（累計擊殺數不會被扣除）')) return;
+  b.channels = {};
+  saveState();
+  hideToast();
+  renderAll();
+}
+function resetCounts(){
+  const b = getActiveBoss();
+  if(!b) return;
+  if(!confirm('確定要把「' + b.name + '」的累計擊殺數歸零嗎？（頻道計時會保留，熱點與每日統計也會一起清空）')) return;
+  b.kills = [];
+  saveState();
+  hideToast();
+  renderAll();
+}
+function deleteBoss(){
+  const b = getActiveBoss();
+  if(!b) return;
+  if(!confirm('確定要刪除「' + b.name + '」嗎？此操作將刪除該王所有頻道的擊殺紀錄與累計數，且無法復原。')) return;
+  state.bosses = state.bosses.filter(x => x.id !== b.id);
+  state.activeBossId = state.bosses.length ? state.bosses[0].id : null;
+  saveState();
+  hideToast();
+  renderBossSelector();
+  renderAll();
+}
+
+function exportData(){
+  const d = new Date();
+  const name = '攻王計時器備份_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '.json';
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+importFile.addEventListener('change', () => {
+  const file = importFile.files[0];
+  importFile.value = '';
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try{ data = JSON.parse(reader.result); }catch(e){ alert('這個檔案不是有效的備份檔（JSON 格式錯誤）。'); return; }
+    if(!data || !Array.isArray(data.bosses)){ alert('這個檔案不是攻王計時器的備份檔。'); return; }
+    const kills = data.bosses.reduce((n, b) => n + ((b.kills || []).length), 0);
+    if(!confirm('備份內有 ' + data.bosses.length + ' 隻王、' + kills + ' 筆擊殺紀錄。\n匯入後會取代這台裝置上目前的全部資料，確定嗎？')) return;
+    state = migrate(data);
+    if(!state.bosses.some(b => b.id === state.activeBossId)) state.activeBossId = state.bosses.length ? state.bosses[0].id : null;
+    saveState();
+    hideToast();
+    renderBossSelector();
+    renderAll();
+    alert('匯入完成。');
+  };
+  reader.onerror = () => alert('讀取檔案失敗：' + reader.error);
+  reader.readAsText(file);
+});
+
+// 頻道卡片、掃頻與設定頁共用的按鈕動作
+function handleAct(e){
+  const b = e.target.closest('[data-act]');
+  if(!b) return;
+  const ch = Number(b.dataset.ch);
+  switch(b.dataset.act){
+    case 'kill-me': kill(ch, 'me'); break;
+    case 'kill-other': kill(ch, 'other'); break;
+    case 'owner': toggleOwner(ch); break;
+    case 'pin': togglePin(ch); break;
+    case 'time': openTimeSheet(ch); break;
+    case 'clear': clearChannel(ch); break;
+    case 'add-boss': openBossSheet(null); break;
+    case 'edit-boss': openBossSheet(getActiveBoss()); break;
+    case 'delete-boss': deleteBoss(); break;
+    case 'clear-all': clearAll(); break;
+    case 'reset-counts': resetCounts(); break;
+    case 'export': exportData(); break;
+    case 'import': importFile.click(); break;
+  }
+}
+
+// ---------- 新增／編輯王 ----------
+const bossSheet = document.getElementById('bossSheet');
+const bossNameInput = document.getElementById('bossNameInput');
+const fixedFields = document.getElementById('fixedFields');
+const rangeFields = document.getElementById('rangeFields');
+const fixedHour = document.getElementById('fixedHour');
+const fixedMinute = document.getElementById('fixedMinute');
+const minHour = document.getElementById('minHour');
+const minMinute = document.getElementById('minMinute');
+const maxHour = document.getElementById('maxHour');
+const maxMinute = document.getElementById('maxMinute');
+let editingBossId = null;
+
+function toggleTypeFields(type){
+  fixedFields.hidden = type !== 'fixed';
+  rangeFields.hidden = type !== 'range';
+}
+document.querySelectorAll('input[name=respawnType]').forEach(r => r.addEventListener('change', e => toggleTypeFields(e.target.value)));
+
+function openBossSheet(boss){
+  editingBossId = boss ? boss.id : null;
+  document.getElementById('bossSheetTitle').textContent = boss ? '編輯王' : '新增王';
+  bossNameInput.value = boss ? boss.name : '';
+  const type = boss ? boss.respawnType : 'fixed';
+  document.querySelectorAll('input[name=respawnType]').forEach(r => r.checked = (r.value === type));
+  toggleTypeFields(type);
+  const fm = boss && boss.respawnType === 'fixed' ? boss.fixedMinutes : 120;
+  fixedHour.value = Math.floor(fm/60); fixedMinute.value = fm%60;
+  const mn = boss && boss.respawnType === 'range' ? boss.minMinutes : 120;
+  const mx = boss && boss.respawnType === 'range' ? boss.maxMinutes : 180;
+  minHour.value = Math.floor(mn/60); minMinute.value = mn%60;
+  maxHour.value = Math.floor(mx/60); maxMinute.value = mx%60;
+  bossSheet.hidden = false;
+}
+document.getElementById('bossSheetCancel').addEventListener('click', () => bossSheet.hidden = true);
+document.getElementById('bossSheetSave').addEventListener('click', () => {
+  const name = bossNameInput.value.trim();
+  if(!name){ alert('請輸入王的名稱'); return; }
+  const type = document.querySelector('input[name=respawnType]:checked').value;
+  let fixedMinutes = null, minMinutes = null, maxMinutes = null;
+  if(type === 'fixed'){
+    fixedMinutes = (Number(fixedHour.value)||0)*60 + (Number(fixedMinute.value)||0);
+    if(fixedMinutes <= 0){ alert('請輸入有效的重生時間'); return; }
+  } else {
+    minMinutes = (Number(minHour.value)||0)*60 + (Number(minMinute.value)||0);
+    maxMinutes = (Number(maxHour.value)||0)*60 + (Number(maxMinute.value)||0);
+    if(minMinutes <= 0 || maxMinutes <= 0 || maxMinutes < minMinutes){
+      alert('請確認最短/最長重生時間設定正確（最長需大於等於最短）');
+      return;
+    }
+  }
+  if(editingBossId){
+    const b = state.bosses.find(x => x.id === editingBossId);
+    b.name = name; b.respawnType = type;
+    b.fixedMinutes = fixedMinutes; b.minMinutes = minMinutes; b.maxMinutes = maxMinutes;
+  } else {
+    const nb = {
+      id: genId(), name, respawnType: type, fixedMinutes, minMinutes, maxMinutes,
+      channels: {}, kills: [], pinned: [],
+      round: { start: CHANNEL_COUNT, checked: [], pass: 1 }, dismissed: []
+    };
+    state.bosses.push(nb);
+    state.activeBossId = nb.id;
+  }
+  saveState();
+  bossSheet.hidden = true;
+  hideToast();
+  renderBossSelector();
+  renderAll();
+});
+
+// ---------- 手動設定擊殺時間 ----------
+const timeSheet = document.getElementById('timeSheet');
+const manualTimeInput = document.getElementById('manualTimeInput');
+let editingChannel = null;
+
+function openTimeSheet(ch){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  editingChannel = ch;
+  document.getElementById('timeSheetChannel').textContent = ch + ' 頻';
+  const rec = boss.channels[ch];
+  manualTimeInput.value = toLocalDatetimeInputValue(rec ? rec.ts : Date.now());
+  const by = rec ? rec.by : 'me';
+  document.querySelectorAll('input[name=timeOwner]').forEach(r => r.checked = (r.value === by));
+  timeSheet.hidden = false;
+}
+document.getElementById('timeSheetCancel').addEventListener('click', () => timeSheet.hidden = true);
+document.getElementById('timeSheetSave').addEventListener('click', () => {
+  if(editingChannel == null || !manualTimeInput.value) return;
+  const ts = new Date(manualTimeInput.value).getTime();
+  if(isNaN(ts)) return;
+  const by = document.querySelector('input[name=timeOwner]:checked').value;
+  const ch = editingChannel;
+  timeSheet.hidden = true;
+  withUndo(ch + ' 頻擊殺時間已更新', boss => {
+    const rec = boss.channels[ch];
+    if(rec){
+      // 修改既有紀錄，不算新的一次擊殺
+      rec.ts = ts; rec.by = by;
+      const log = findLog(boss, rec);
+      if(log){ log.ts = ts; log.by = by; }
+    } else {
+      addKill(boss, ch, ts, by);
+    }
+  });
+});
+
+// 點面板外的灰色區域關閉
+[bossSheet, timeSheet].forEach(o => o.addEventListener('click', e => { if(e.target === o) o.hidden = true; }));
+
+// ---------- 螢幕常亮（Screen Wake Lock） ----------
+const wakeBtn = document.getElementById('wakeBtn');
+let wakeLock = null, wantWake = false;
+
+async function acquireWake(){
+  try{
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; updateWakeBtn(); });
+  }catch(e){
+    wantWake = false;
+    alert('無法開啟螢幕常亮：' + e.message);
+  }
+  updateWakeBtn();
+}
+function updateWakeBtn(){ wakeBtn.classList.toggle('on', wantWake && !!wakeLock); }
+wakeBtn.addEventListener('click', async () => {
+  if(wantWake){
+    wantWake = false;
+    if(wakeLock) await wakeLock.release();
+    wakeLock = null;
+    updateWakeBtn();
+    return;
+  }
+  if(!('wakeLock' in navigator)){ alert('這個瀏覽器不支援螢幕常亮。可以改到系統設定把自動鎖定時間調長。'); return; }
+  wantWake = true;
+  acquireWake();
+});
+// 切到別的 App 再回來時，系統會自動放掉常亮，要重新要求
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState !== 'visible') return;
+  tick();
+  if(wantWake && !wakeLock) acquireWake();
+});
+
+// ---------- 繪製 ----------
+// 每秒只更新倒數文字；狀態改變（例如進入重生區間）或使用者操作時才整頁重繪，
+// 避免畫面在手指按下的瞬間被換掉而點不到按鈕
+let lastSig = '';
+function stateSig(boss, st){
+  if(!boss) return 'none';
+  let s = boss.id + '|' + dayKey(Date.now());
+  for(let ch = 1; ch <= CHANNEL_COUNT; ch++) s += '|' + st[ch].state;
+  return s;
+}
+
+function renderAll(){
+  const boss = getActiveBoss();
+  const st = boss ? computeAll(boss, Date.now()) : null;
+  lastSig = stateSig(boss, st);
+  renderStats(boss);
+  renderSweep(boss, st);
+  renderChannels(boss, st);
+  renderSettings(boss);
+  renderStatsView();
+  updateTopHeight();
+}
+
+function updateDynamic(boss, st){
+  document.querySelectorAll('[data-t]').forEach(el => {
+    const ch = Number(el.dataset.ch);
+    const s = st[ch];
+    let txt;
+    switch(el.dataset.t){
+      case 'cd': txt = cardTexts(boss, ch, s).cd; break;
+      case 'info': txt = cardTexts(boss, ch, s).info; break;
+      case 'soon': txt = soonText(s); break;
+      case 'early': txt = formatDuration(s.remainingMs); break;
+      default: return;
+    }
+    if(el.textContent !== txt) el.textContent = txt;
+  });
+}
+
+function tick(){
+  document.getElementById('clock').textContent = formatClock(new Date());
+  const boss = getActiveBoss();
+  const st = boss ? computeAll(boss, Date.now()) : null;
+  if(stateSig(boss, st) !== lastSig) renderAll();
+  else if(boss) updateDynamic(boss, st);
+}
+
+// 平板並排時，掃頻欄要黏在頂端列下方
+const topBar = document.getElementById('topBar');
+function updateTopHeight(){ document.documentElement.style.setProperty('--top-h', topBar.offsetHeight + 'px'); }
+window.addEventListener('resize', updateTopHeight);
+
+// ---------- 啟動 ----------
+if(!state.activeBossId && state.bosses.length) state.activeBossId = state.bosses[0].id;
+writeStore('maple_boss_timer_probe', '1');
+if(!storageOK) document.getElementById('storageWarn').hidden = false;
+saveState();
+renderBossSelector();
+setTab(ui.tab);
+renderAll();
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
