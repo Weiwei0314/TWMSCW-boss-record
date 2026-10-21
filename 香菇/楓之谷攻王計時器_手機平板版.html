@@ -60,6 +60,8 @@
   .stats b{color:var(--text);font-variant-numeric:tabular-nums;font-size:1rem;}
   .stats .s-me b{color:var(--me);}
   .stats .s-other b{color:var(--other);}
+  .stat-edit{min-height:30px;padding:1px 8px;border-style:dashed;border-radius:8px;background:transparent;color:var(--muted);font-size:.85rem;}
+  .stat-edit b{color:var(--text);font-variant-numeric:tabular-nums;font-size:1rem;}
   .warn{margin:8px 12px 0;padding:10px 12px;border-radius:10px;background:var(--ready-bg);color:var(--ready-text);font-size:.85rem;}
 
   .main{padding:12px;max-width:1400px;margin:0 auto;}
@@ -307,7 +309,8 @@
       <h2>紀錄</h2>
       <div class="btn-col">
         <button data-act="clear-all" class="btn-danger need-boss">清除全部頻道計時（累計數保留）</button>
-        <button data-act="reset-counts" class="btn-danger need-boss">累計擊殺數歸零（頻道計時保留）</button>
+        <button data-act="edit-count" class="need-boss">手動修改／清除累計擊殺數</button>
+        <button data-act="reset-counts" class="btn-danger need-boss">刪除全部擊殺紀錄（累計、熱點、每日統計一起清空）</button>
       </div>
     </div>
     <div class="panel">
@@ -378,6 +381,29 @@
   </div>
 </div>
 
+<!-- 手動修改累計擊殺數 -->
+<div class="sheet-overlay" id="countSheet" hidden>
+  <div class="sheet">
+    <h2>累計擊殺數 - <span id="countSheetBoss"></span></h2>
+    <div class="row2">
+      <div class="field">
+        <label for="countMe">累積我</label>
+        <input type="number" id="countMe" inputmode="numeric" min="0">
+      </div>
+      <div class="field">
+        <label for="countOther">累積別人</label>
+        <input type="number" id="countOther" inputmode="numeric" min="0">
+      </div>
+    </div>
+    <p class="note">只改上方顯示的累計數。熱點和每日統計用的擊殺紀錄不會被刪掉；之後每次按擊殺，會從你填的數字繼續往上加。</p>
+    <div class="sheet-actions">
+      <button id="countSheetZero" class="btn-danger">全部歸零</button>
+      <button id="countSheetCancel">取消</button>
+      <button id="countSheetSave" class="btn-primary">儲存</button>
+    </div>
+  </div>
+</div>
+
 <!-- 手動設定擊殺時間 -->
 <div class="sheet-overlay" id="timeSheet" hidden>
   <div class="sheet">
@@ -429,6 +455,8 @@ function migrate(s){
     b.round.checked = b.round.checked || [];
     b.round.pass = b.round.pass || 1;
     b.dismissed = b.dismissed || [];
+    // 手動調整累計數：加在實際擊殺紀錄上，不動到熱點與每日統計
+    b.countAdj = b.countAdj || { me: 0, other: 0 };
     Object.keys(b.channels).forEach(ch => {
       const v = b.channels[ch];
       if(typeof v === 'number'){
@@ -510,10 +538,21 @@ function addKill(boss, ch, ts, by){
   boss.round.checked = boss.round.checked.filter(c => c !== ch);
 }
 function findLog(boss, rec){ return rec ? boss.kills.find(k => k.id === rec.logId) : null; }
-function countKills(boss){
+function rawCounts(boss){
   let me = 0, other = 0;
   boss.kills.forEach(k => { if(k.by === 'me') me++; else other++; });
+  return { me, other };
+}
+function countKills(boss){
+  const r = rawCounts(boss);
+  const me = Math.max(0, r.me + (boss.countAdj.me || 0));
+  const other = Math.max(0, r.other + (boss.countAdj.other || 0));
   return { me, other, total: me + other };
+}
+// 把顯示的累計數設成指定值：換算成相對實際紀錄的調整值
+function setCounts(boss, me, other){
+  const r = rawCounts(boss);
+  boss.countAdj = { me: me - r.me, other: other - r.other };
 }
 // 以本機時間午夜 00:00 為一天的分界
 function dayKey(ts){
@@ -657,8 +696,9 @@ function renderStats(boss){
   const t = countToday(boss), c = countKills(boss);
   statsEl.innerHTML = '<span class="s-me">今天我 <b>' + t.me + '</b></span>'
     + '<span class="s-other">今天別人 <b>' + t.other + '</b></span>'
-    + '<span>累積我 <b>' + c.me + '</b> / 合計 <b>' + c.total + '</b></span>';
+    + '<button class="stat-edit" data-act="edit-count" title="手動修改或清除累計數">累積我 <b>' + c.me + '</b> / 別人 <b>' + c.other + '</b> / 合計 <b>' + c.total + '</b> ✎</button>';
 }
+statsEl.addEventListener('click', handleAct);
 
 // ---------- 掃頻 ----------
 const sweepDyn = document.getElementById('sweepDyn');
@@ -1052,8 +1092,9 @@ function clearAll(){
 function resetCounts(){
   const b = getActiveBoss();
   if(!b) return;
-  if(!confirm('確定要把「' + b.name + '」的累計擊殺數歸零嗎？（頻道計時會保留，熱點與每日統計也會一起清空）')) return;
+  if(!confirm('確定要刪除「' + b.name + '」的全部擊殺紀錄嗎？\n累計數、熱點與每日統計會一起清空，頻道計時會保留。\n（只想把累計數歸零，請改用「手動修改／清除累計擊殺數」）')) return;
   b.kills = [];
+  b.countAdj = { me: 0, other: 0 };
   saveState();
   hideToast();
   renderAll();
@@ -1122,6 +1163,7 @@ function handleAct(e){
     case 'delete-boss': deleteBoss(); break;
     case 'clear-all': clearAll(); break;
     case 'reset-counts': resetCounts(); break;
+    case 'edit-count': openCountSheet(); break;
     case 'export': exportData(); break;
     case 'import': importFile.click(); break;
   }
@@ -1186,7 +1228,8 @@ document.getElementById('bossSheetSave').addEventListener('click', () => {
     const nb = {
       id: genId(), name, respawnType: type, fixedMinutes, minMinutes, maxMinutes,
       channels: {}, kills: [], pinned: [],
-      round: { start: CHANNEL_COUNT, checked: [], pass: 1 }, dismissed: []
+      round: { start: CHANNEL_COUNT, checked: [], pass: 1 }, dismissed: [],
+      countAdj: { me: 0, other: 0 }
     };
     state.bosses.push(nb);
     state.activeBossId = nb.id;
@@ -1236,7 +1279,36 @@ document.getElementById('timeSheetSave').addEventListener('click', () => {
 });
 
 // 點面板外的灰色區域關閉
-[bossSheet, timeSheet].forEach(o => o.addEventListener('click', e => { if(e.target === o) o.hidden = true; }));
+// ---------- 手動修改累計擊殺數 ----------
+const countSheet = document.getElementById('countSheet');
+const countMe = document.getElementById('countMe');
+const countOther = document.getElementById('countOther');
+
+function openCountSheet(){
+  const boss = getActiveBoss();
+  if(!boss) return;
+  const c = countKills(boss);
+  document.getElementById('countSheetBoss').textContent = boss.name;
+  countMe.value = c.me;
+  countOther.value = c.other;
+  countSheet.hidden = false;
+}
+function readCount(input){
+  const n = Math.round(Number(input.value));
+  return n > 0 ? n : 0;
+}
+document.getElementById('countSheetCancel').addEventListener('click', () => countSheet.hidden = true);
+document.getElementById('countSheetSave').addEventListener('click', () => {
+  const me = readCount(countMe), other = readCount(countOther);
+  countSheet.hidden = true;
+  withUndo('累計已改為 我 ' + me + '／別人 ' + other, boss => setCounts(boss, me, other));
+});
+document.getElementById('countSheetZero').addEventListener('click', () => {
+  countSheet.hidden = true;
+  withUndo('累計擊殺數已歸零', boss => setCounts(boss, 0, 0));
+});
+
+[bossSheet, timeSheet, countSheet].forEach(o => o.addEventListener('click', e => { if(e.target === o) o.hidden = true; }));
 
 // ---------- 螢幕常亮（Screen Wake Lock） ----------
 const wakeBtn = document.getElementById('wakeBtn');
