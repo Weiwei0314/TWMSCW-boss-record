@@ -189,10 +189,12 @@
   .nav-btn.on{color:var(--accent);font-weight:700;}
   .wide-only{display:none;}
 
-  /* 頻道頁：跳到最上／最下（放在復原提示上方，不互相遮住） */
-  .jump-fab{position:fixed;z-index:44;right:calc(12px + env(safe-area-inset-right));bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 76px);display:none;flex-direction:column;gap:8px;}
-  body[data-tab=channels] .jump-fab{display:flex;}
-  .jump-fab button{width:46px;height:46px;min-height:46px;padding:0;border-radius:50%;font-size:1.2rem;font-weight:700;background:var(--panel);box-shadow:0 3px 10px rgba(0,0,0,.18);opacity:.92;}
+  /* 頻道頁：跳到最上／最下。貼在底部分頁列上方，並預留頁面底部空間，不會蓋到卡片按鈕 */
+  .jump-bar{position:fixed;left:0;right:0;z-index:39;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom));display:none;gap:8px;padding:6px calc(12px + env(safe-area-inset-right)) 6px calc(12px + env(safe-area-inset-left));background:var(--panel);border-top:1px solid var(--border);}
+  .jump-bar button{flex:1;min-height:40px;padding:4px;font-weight:700;}
+  body[data-tab=channels] .jump-bar{display:flex;}
+  body[data-tab=channels]{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 76px);}
+  body[data-tab=channels] .toast{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 64px);}
 
   /* 復原提示 */
   .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);z-index:45;display:flex;align-items:center;gap:12px;background:var(--text);color:var(--bg);padding:6px 6px 6px 16px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:.9rem;width:max-content;max-width:calc(100% - 24px);}
@@ -224,7 +226,9 @@
     .nav-btn[data-tab=channels]{display:none;}
     body[data-tab=channels] .nav-btn[data-tab=sweep]{color:var(--accent);font-weight:700;}
     .wide-only{display:inline;}
-    body[data-tab=sweep] .jump-fab{display:flex;}
+    body[data-tab=sweep] .jump-bar{display:flex;}
+    body[data-tab=sweep]{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 76px);}
+    body[data-tab=sweep] .toast{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 64px);}
     .grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr));}
   }
 </style>
@@ -339,9 +343,9 @@
   <button class="nav-btn" data-tab="settings"><span class="ic">⚙️</span><span>設定</span></button>
 </nav>
 
-<div class="jump-fab" id="jumpFab">
-  <button data-edge="top" aria-label="跳到最上面">↑</button>
-  <button data-edge="bottom" aria-label="跳到最下面">↓</button>
+<div class="jump-bar" id="jumpFab">
+  <button data-edge="top">↑ 最上面</button>
+  <button data-edge="bottom">↓ 最下面</button>
 </div>
 
 <div class="toast" id="toast" hidden><span id="toastMsg"></span><button id="toastUndo">復原</button></div>
@@ -680,8 +684,8 @@ function setTab(tab){
   window.scrollTo(0, tabScroll[tab] || 0);
 }
 function scrollToEdge(where){
-  const top = where === 'top' ? 0 : document.documentElement.scrollHeight;
-  window.scrollTo({ top, behavior: 'smooth' });
+  // 直接跳過去：iPhone 上平滑捲動長頁面很慢
+  window.scrollTo(0, where === 'top' ? 0 : document.documentElement.scrollHeight);
 }
 document.getElementById('jumpFab').addEventListener('click', e => {
   const b = e.target.closest('[data-edge]');
