@@ -117,6 +117,22 @@
   .daily-table td.other{color:var(--other);font-weight:700;}
   .daily-table tr.today td{background:var(--idle);}
   .daily-table td.cum{color:var(--muted);}
+  /* 時間熱點：星期 × 小時 */
+  :root{--heat-rgb:234,88,12;}
+  .modal.xwide{max-width:900px;}
+  .filter-row{display:flex;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px;}
+  .filter-row .field{margin-bottom:0;}
+  .heat-top{font-size:.85rem;margin-bottom:8px;line-height:1.6;}
+  .heat-top b{color:rgb(var(--heat-rgb));font-variant-numeric:tabular-nums;}
+  .heat-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;padding:4px;}
+  .heat-table{border-collapse:separate;border-spacing:2px;font-size:.7rem;font-variant-numeric:tabular-nums;width:100%;}
+  .heat-table th{color:var(--muted);font-weight:600;padding:2px;text-align:center;}
+  .heat-table td{min-width:24px;height:24px;text-align:center;border-radius:4px;color:var(--text);}
+  .heat-table td.zero{background:var(--idle);}
+  .heat-table .lbl{text-align:left;white-space:nowrap;padding-right:6px;color:var(--muted);font-weight:600;background:transparent;}
+  .heat-table .sum{color:var(--muted);background:transparent;padding-left:6px;}
+  .heat-table tr.total td,.heat-table tr.total th{border-top:6px solid transparent;background-clip:padding-box;}
+  .heat-note{font-size:.75rem;color:var(--muted);margin-top:8px;}
   [hidden]{display:none!important;}
 
   /* 浮動小視窗 */
@@ -272,6 +288,43 @@
     <div id="dailyBody"></div>
     <div class="modal-actions">
       <button id="dailyModalClose" class="btn-primary">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 擊殺時間熱點 -->
+<div class="modal-overlay" id="heatModalOverlay" hidden>
+  <div class="modal xwide">
+    <h2>🔥 擊殺時間熱點</h2>
+    <div class="filter-row">
+      <div class="field">
+        <label>統計範圍</label>
+        <select id="heatScope">
+          <option value="boss">目前這隻王</option>
+          <option value="all">所有王合計</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>誰擊殺的</label>
+        <select id="heatWho">
+          <option value="all">全部</option>
+          <option value="me">只看自己</option>
+          <option value="other">只看別人</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>期間</label>
+        <select id="heatRange">
+          <option value="0">全部紀錄</option>
+          <option value="7">最近 7 天</option>
+          <option value="30">最近 30 天</option>
+        </select>
+      </div>
+    </div>
+    <div id="heatBody"></div>
+    <div class="heat-note">擊殺時間約等於「發現王已重生」的時間，所以熱點代表王大多在這些時段被找到。顏色越深＝該時段擊殺越多；時間以本機時區計算。</div>
+    <div class="modal-actions">
+      <button id="heatModalClose" class="btn-primary">關閉</button>
     </div>
   </div>
 </div>
@@ -785,6 +838,7 @@ function myBarHTML(boss, statusByCh){
     + '<span>累積合計 <b>' + c.total + '</b></span>'
     + (state.bosses.length > 1 ? '<span>所有王我共擊殺 <b>' + allMe + '</b> 隻</span>' : '')
     + '<button data-act="daily">📅 每日統計</button>'
+    + '<button data-act="heat">🔥 時間熱點</button>'
     + '<button data-act="reset">累計歸零</button>'
     + '</div>'
     + '<div class="chips">' + (chips.length ? chips.join('') : '<span class="none">目前沒有自己擊殺中的頻道</span>') + '</div>';
@@ -795,6 +849,7 @@ function onBarClick(e){
   if(chip){ jumpToChannel(Number(chip.dataset.ch)); return; }
   if(e.target.closest('[data-act=reset]')) resetCounts();
   if(e.target.closest('[data-act=daily]')) openDailyModal();
+  if(e.target.closest('[data-act=heat]')) openHeatModal();
 }
 myBar.addEventListener('click', onBarClick);
 
@@ -836,6 +891,83 @@ function openDailyModal(){
 }
 dailyScope.addEventListener('change', renderDaily);
 document.getElementById('dailyModalClose').addEventListener('click', () => dailyModalOverlay.hidden = true);
+
+// ---------- 時間熱點 ----------
+const heatModalOverlay = document.getElementById('heatModalOverlay');
+const heatScope = document.getElementById('heatScope');
+const heatWho = document.getElementById('heatWho');
+const heatRange = document.getElementById('heatRange');
+const heatBody = document.getElementById('heatBody');
+// 週一排第一列；getDay() 的 0 是週日
+const HEAT_DAYS = [1,2,3,4,5,6,0];
+const WEEKDAY = ['日','一','二','三','四','五','六'];
+
+function heatCell(n, max){
+  if(!n) return '<td class="zero"></td>';
+  const r = n / max;
+  return '<td style="background:rgba(var(--heat-rgb),' + (0.15 + 0.85*r).toFixed(2) + ')' + (r > 0.55 ? ';color:#fff' : '') + '">' + n + '</td>';
+}
+function hourLabel(h){ return pad(h) + ':00–' + pad((h+1)%24) + ':00'; }
+
+function renderHeat(){
+  const boss = getActiveBoss();
+  let kills = heatScope.value === 'all'
+    ? state.bosses.flatMap(b => b.kills)
+    : (boss ? boss.kills : []);
+  if(heatWho.value !== 'all') kills = kills.filter(k => k.by === heatWho.value);
+  const days = Number(heatRange.value);
+  if(days){
+    const since = Date.now() - days*86400000;
+    kills = kills.filter(k => k.ts >= since);
+  }
+  if(!kills.length){
+    heatBody.innerHTML = '<div class="empty-hint">這個範圍內沒有擊殺紀錄</div>';
+    return;
+  }
+
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  const byHour = new Array(24).fill(0);
+  const byDay = new Array(7).fill(0);
+  kills.forEach(k => {
+    const d = new Date(k.ts);
+    grid[d.getDay()][d.getHours()]++;
+    byHour[d.getHours()]++;
+    byDay[d.getDay()]++;
+  });
+  const maxCell = Math.max(...grid.flat());
+  const maxHour = Math.max(...byHour);
+
+  // 最熱的 3 個小時（不分星期）
+  const top = byHour.map((n, h) => ({ h, n })).filter(x => x.n).sort((a, b) => b.n - a.n).slice(0, 3);
+  const topHTML = '<div class="heat-top">共 ' + kills.length + ' 筆 · 最常出現：'
+    + top.map(x => '<b>' + hourLabel(x.h) + '</b>（' + x.n + ' 隻，' + Math.round(x.n / kills.length * 100) + '%）').join('、')
+    + '</div>';
+
+  let hoursHead = '<th class="lbl"></th>';
+  for(let h = 0; h < 24; h++) hoursHead += '<th>' + h + '</th>';
+  hoursHead += '<th class="sum">合計</th>';
+
+  const rows = HEAT_DAYS.map(dw => {
+    let tr = '<tr><th class="lbl">週' + WEEKDAY[dw] + '</th>';
+    for(let h = 0; h < 24; h++) tr += heatCell(grid[dw][h], maxCell);
+    return tr + '<td class="sum">' + byDay[dw] + '</td></tr>';
+  }).join('');
+
+  let totalRow = '<tr class="total"><th class="lbl">每小時合計</th>';
+  for(let h = 0; h < 24; h++) totalRow += heatCell(byHour[h], maxHour);
+  totalRow += '<td class="sum">' + kills.length + '</td></tr>';
+
+  heatBody.innerHTML = topHTML
+    + '<div class="heat-scroll"><table class="heat-table"><thead><tr>' + hoursHead + '</tr></thead><tbody>'
+    + rows + totalRow + '</tbody></table></div>';
+}
+function openHeatModal(){
+  window.focus();
+  renderHeat();
+  heatModalOverlay.hidden = false;
+}
+[heatScope, heatWho, heatRange].forEach(el => el.addEventListener('change', renderHeat));
+document.getElementById('heatModalClose').addEventListener('click', () => heatModalOverlay.hidden = true);
 
 function renderAll(){
   const boss = getActiveBoss();

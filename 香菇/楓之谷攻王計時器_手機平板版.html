@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="攻王計時器">
+<!-- iOS 桌面圖示：180×180、不透明（透明處會被 iOS 填成黑色），需與本檔放在同一個資料夾 -->
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
 <title>攻王計時器 行動版</title>
 <style>
   :root{
@@ -91,6 +95,9 @@
   .round-ctl input{width:72px;text-align:center;-moz-appearance:textfield;appearance:textfield;}
   .round-ctl input::-webkit-inner-spin-button,.round-ctl input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
   .round-ctl .pass-btn{flex:1;min-width:120px;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+  .panel-head h2{margin:0;}
+  .small-btn{min-height:36px;padding:4px 12px;font-size:.85rem;}
   .soon-list{display:flex;flex-direction:column;gap:6px;}
   .soon-row{display:flex;align-items:center;border-radius:10px;border:1.5px solid transparent;background:var(--idle);font-variant-numeric:tabular-nums;}
   .soon-jump{flex:1;display:flex;justify-content:space-between;gap:8px;padding:10px 12px;background:transparent;border:none;min-height:44px;text-align:left;color:inherit;font-weight:inherit;}
@@ -230,13 +237,11 @@
   <!-- 掃頻 -->
   <section class="view" id="viewSweep">
     <div class="panel"><div id="sweepDyn"></div></div>
-    <div class="panel round-ctl" id="roundCtl">
-      <span>從</span><input type="number" id="startInput" inputmode="numeric" min="1" max="60"><span>頻開始</span>
-      <button class="pass-btn" data-pass="1">第一次・全掃</button>
-      <button class="pass-btn" data-pass="2">第二次・補掃</button>
-    </div>
     <div class="panel" id="soonPanel">
-      <h2>⏰ 最接近重生</h2>
+      <div class="panel-head">
+        <h2>⏰ 最接近重生</h2>
+        <button class="btn-danger small-btn" id="soonClearAll" data-dismiss-all>全部清除</button>
+      </div>
       <div id="soonArea"></div>
     </div>
   </section>
@@ -658,9 +663,8 @@ function renderStats(boss){
 // ---------- 掃頻 ----------
 const sweepDyn = document.getElementById('sweepDyn');
 const soonArea = document.getElementById('soonArea');
-const roundCtl = document.getElementById('roundCtl');
 const soonPanel = document.getElementById('soonPanel');
-const startInput = document.getElementById('startInput');
+const soonClearAll = document.getElementById('soonClearAll');
 const STATE_LABEL = { idle:'尚未記錄', waiting:'等待重生', window:'重生區間中', ready:'王已重生' };
 
 function clampCh(v){
@@ -694,11 +698,9 @@ function soonText(s){
 function renderSweep(boss, st){
   if(!boss){
     sweepDyn.innerHTML = '<div class="empty-hint">尚未設定任何王<br><button class="btn-primary" data-act="add-boss">+ 新增王</button></div>';
-    roundCtl.hidden = true;
     soonPanel.hidden = true;
     return;
   }
-  roundCtl.hidden = false;
   soonPanel.hidden = false;
 
   const r = boss.round;
@@ -751,12 +753,13 @@ function renderSweep(boss, st){
   }
   sweepDyn.innerHTML = earlyLine('me', '🟢 我打的') + earlyLine('other', '🟣 別人打的') + sweep;
 
-  // 最接近重生：區間中的排最前，再依剩餘時間由短到長；手動移除的區間頻道不列出
+  // 最接近重生：區間中的排最前，再依剩餘時間由短到長；手動移除的不列出（頻道計時與累計數不受影響）
   const soon = [];
   for(let ch = 1; ch <= CHANNEL_COUNT; ch++){
     const s = st[ch];
-    if(s.state === 'window' && boss.dismissed.includes(boss.channels[ch].logId)) continue;
-    if(s.state === 'waiting' || s.state === 'window') soon.push({ ch, s });
+    if(s.state !== 'waiting' && s.state !== 'window') continue;
+    if(boss.dismissed.includes(boss.channels[ch].logId)) continue;
+    soon.push({ ch, s });
   }
   soon.sort((a, b) => {
     if(a.s.state !== b.s.state) return a.s.state === 'window' ? -1 : 1;
@@ -768,13 +771,21 @@ function renderSweep(boss, st){
         const isWin = it.s.state === 'window';
         return '<div class="soon-row ' + it.s.state + (i === 0 ? ' top' : '') + '">'
           + '<button class="soon-jump" data-jump="' + it.ch + '"><span>' + it.ch + ' 頻（' + by + '）</span><span data-t="soon" data-ch="' + it.ch + '">' + soonText(it.s) + '</span></button>'
-          + (isWin ? '<button class="soon-x" data-dismiss="' + it.ch + '" aria-label="還沒重生，先移除">✕</button>' : '')
+          + '<button class="soon-x" data-dismiss="' + it.ch + '" aria-label="從清單移除">✕</button>'
           + '</div>';
       }).join('') + '</div>'
     : '<div class="note">目前沒有等待重生的頻道</div>';
+  soonClearAll.hidden = !soon.length;
+}
 
-  document.querySelectorAll('.pass-btn').forEach(b => b.classList.toggle('btn-primary', Number(b.dataset.pass) === (r.pass || 1)));
-  if(document.activeElement !== startInput) startInput.value = r.start;
+// 從「最接近重生」移除：記下該筆擊殺的 logId；之後重新擊殺會換新 logId，自動回到清單
+function dismissChannels(boss, chs){
+  const live = Object.values(boss.channels).map(x => x.logId);
+  boss.dismissed = boss.dismissed.filter(id => live.includes(id));
+  chs.forEach(ch => {
+    const rec = boss.channels[ch];
+    if(rec && !boss.dismissed.includes(rec.logId)) boss.dismissed.push(rec.logId);
+  });
 }
 
 // 切換第一次 / 第二次：本輪看過的紀錄歸零。
@@ -782,7 +793,6 @@ function renderSweep(boss, st){
 function setPass(pass){
   const boss = getActiveBoss();
   if(!boss) return;
-  boss.round.start = clampCh(startInput.value || boss.round.start);
   boss.round.pass = pass;
   boss.round.checked = [];
   saveState();
@@ -801,30 +811,23 @@ document.getElementById('viewSweep').addEventListener('click', e => {
   }
   const pass = e.target.closest('[data-pass]');
   if(pass){ setPass(Number(pass.dataset.pass)); return; }
-  // 區間中但其實還沒重生：從「最接近重生」移除，讓後面的頻道顯示出來
+  // 從「最接近重生」移除，讓後面的頻道顯示出來
   const dis = e.target.closest('[data-dismiss]');
   if(dis && boss){
-    const rec = boss.channels[Number(dis.dataset.dismiss)];
-    if(rec){
-      withUndo(dis.dataset.dismiss + ' 頻已從清單移除', b => {
-        const live = Object.values(b.channels).map(x => x.logId);
-        b.dismissed = b.dismissed.filter(id => live.includes(id));
-        b.dismissed.push(rec.logId);
-      });
-    }
+    const ch = Number(dis.dataset.dismiss);
+    withUndo(ch + ' 頻已從清單移除', b => dismissChannels(b, [ch]));
+    return;
+  }
+  if(e.target.closest('[data-dismiss-all]') && boss){
+    const st = computeAll(boss, Date.now());
+    const chs = [];
+    for(let ch = 1; ch <= CHANNEL_COUNT; ch++) if(st[ch].state === 'waiting' || st[ch].state === 'window') chs.push(ch);
+    withUndo('已清除「最接近重生」清單', b => dismissChannels(b, chs));
     return;
   }
   const jump = e.target.closest('[data-jump]');
   if(jump){ jumpToChannel(Number(jump.dataset.jump)); return; }
   handleAct(e);
-});
-startInput.addEventListener('change', () => {
-  const boss = getActiveBoss();
-  if(!boss) return;
-  boss.round.start = clampCh(startInput.value);
-  startInput.value = boss.round.start;
-  saveState();
-  renderAll();
 });
 
 // ---------- 頻道 ----------
